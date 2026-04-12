@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+model Client {
+  id              String         @id @default(cuid())
+  whatsappNumber  String         @unique
+  name            String?
+  formalId        String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  conversations   Conversation[]
+  bookings        Booking[]
+  messages        Message[]
+}
+
+model Conversation {
+  id              String      @id @default(cuid())
+  clientId        String
+  currentIntent   String      @default("unknown")
+  currentStep     String      @default("idle")
+  collectedData   Json?
+  lastBookingId   String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  client          Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  lastBooking     Booking?    @relation("LastBooking", fields: [lastBookingId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  messages        Message[]
+}
+
+model Message {
+  id              String        @id @default(cuid())
+  conversationId  String
+  clientId        String
+  direction       String
+  messageType     String
+  content         String
+  providerId      String?
+  metadata        Json?
+  createdAt       DateTime      @default(now())
+  conversation    Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  client          Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+model Service {
+  id                String      @id @default(cuid())
+  code              String      @unique
+  name              String
+  description       String
+  durationMinutes   Int
+  price             Int
+  currency          String      @default("CLP")
+  calendarId        String?
+  active            Boolean     @default(true)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  bookings          Booking[]
+}
+
+model Booking {
+  id                  String          @id @default(cuid())
+  clientId            String
+  serviceId           String
+  status              BookingStatus   @default(PENDING)
+  scheduledAt         DateTime
+  endAt               DateTime
+  notes               String?
+  calendarEventId     String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  client              Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  service             Service         @relation(fields: [serviceId], references: [id])
+  paymentLink         PaymentLink?
+  conversations       Conversation[]  @relation("LastBooking")
+}
+
+model PaymentLink {
+  id              String      @id @default(cuid())
+  bookingId       String      @unique
+  provider        String
+  url             String
+  amount          Int
+  currency        String      @default("CLP")
+  status          String      @default("PENDING")
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  booking         Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
