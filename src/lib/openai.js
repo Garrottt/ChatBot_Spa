@@ -33,7 +33,7 @@ function localIntentClassifier(text) {
     return { intent: 'reschedule_booking', confidence: 0.88, entities: {} };
   }
 
-  if (/(horario|ubicacion|ubicación|direccion|dirección|donde|dónde|precio|precios|servicio|servicios|spa|nombre|beneficios|tratamientos)/.test(normalized)) {
+  if (/(horario|ubicacion|ubicaci\u00F3n|direccion|direcci\u00F3n|donde|d\u00F3nde|precio|precios|servicio|servicios|spa|nombre|beneficios|tratamientos)/.test(normalized)) {
     return { intent: 'faq', confidence: 0.82, entities: {} };
   }
 
@@ -165,10 +165,125 @@ Instrucciones:
     }
   }
 
+  async function validatePaymentProof({
+    imageBuffer,
+    mimeType,
+    amount,
+    currency = 'CLP',
+    expectedPayerName,
+    expectedFormalId,
+    paymentWindowStartsAt,
+    paymentWindowEndsAt
+  }) {
+    if (!imageBuffer || !imageBuffer.length) {
+      return {
+        isValid: false,
+        reason: 'No pude leer la imagen del comprobante.',
+        detectedAmount: null,
+        payerName: null,
+        payerFormalId: null,
+        paymentTimestamp: null,
+        confidence: 0
+      };
+    }
+
+    if (!client) {
+      return {
+        isValid: false,
+        reason: 'La validacion automatica del comprobante no esta disponible en este momento.',
+        detectedAmount: null,
+        payerName: null,
+        payerFormalId: null,
+        paymentTimestamp: null,
+        confidence: 0
+      };
+    }
+
+    try {
+      const response = await client.responses.create({
+        model: env.openAiModel,
+        input: [
+          {
+            role: 'system',
+            content: 'Eres un extractor y validador de comprobantes de pago. Tu unica tarea es: (1) determinar si la imagen ES un comprobante de pago genuino, y (2) extraer los datos visibles. Responde SOLO JSON con forma {"isValid":boolean,"reason":"","detectedAmount":number|null,"payerName":string|null,"payerFormalId":string|null,"paymentTimestamp":string|null,"transactionId":string|null,"confidence":0}.'
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'input_text',
+                text: `Analiza la imagen y responde siguiendo estas reglas estrictas:
+
+REGLA 1 - isValid:
+- isValid=true: la imagen parece un comprobante, voucher o captura de pantalla real de un pago o transferencia bancaria (de cualquier banco, billetera digital o procesador de pagos).
+- isValid=false: UNICAMENTE si la imagen claramente NO es un comprobante de pago (foto de otra cosa, imagen en blanco, captura de redes sociales, documento sin relacion con pagos, etc).
+- NO uses isValid=false porque el monto sea diferente al esperado, porque falte el RUT, o porque la hora este fuera del rango. Esas validaciones las realiza el sistema por separado.
+
+REGLA 2 - Extraccion de datos:
+- payerName: nombre del pagador o titular que aparece en el comprobante. Si hay varios nombres, conserva el nombre completo tal como aparece.
+- payerFormalId: RUT o identificador SOLO si aparece visiblemente en la imagen. Muchos comprobantes bancarios chilenos NO incluyen el RUT; en ese caso devuelve null.
+- detectedAmount: monto numerico visible (sin simbolos). Puede no coincidir con el esperado; extraelo igual.
+- paymentTimestamp: fecha y hora en formato ISO 8601 CON offset de zona horaria. Para comprobantes chilenos con "Fecha" y "Hora" por separado, combinalas con el offset -04:00 (America/Santiago). Ejemplo: "2026-04-14T11:39:13-04:00". Si no puedes leer la fecha/hora, devuelve null.
+- transactionId: numero de solicitud, folio, numero de operacion, numero de transaccion, ID de operacion o cualquier identificador unico de la transaccion que aparezca en el comprobante (por ejemplo el campo "N° de Solicitud", "Folio", "N° Operacion", etc). Si no aparece ninguno, devuelve null.
+- Si un campo no es legible, devuelve null para ese campo.
+
+Datos de referencia (solo para contexto, NO para determinar isValid):
+- Pagador esperado: ${expectedPayerName || 'No disponible'}
+- RUT esperado: ${expectedFormalId || 'No disponible'}
+- Ventana de pago: desde ${paymentWindowStartsAt || 'No disponible'} hasta ${paymentWindowEndsAt || 'No disponible'}`
+              },
+              {
+                type: 'input_image',
+                image_url: `data:${mimeType || 'image/jpeg'};base64,${imageBuffer.toString('base64')}`
+              }
+            ]
+          }
+        ]
+      });
+
+      const parsed = extractJson(response.output_text || '');
+      if (!parsed || typeof parsed.isValid !== 'boolean') {
+        return {
+          isValid: false,
+          reason: 'No pude validar el comprobante con suficiente claridad.',
+          detectedAmount: null,
+          payerName: null,
+          payerFormalId: null,
+          paymentTimestamp: null,
+          confidence: 0
+        };
+      }
+
+      return {
+        isValid: parsed.isValid,
+        reason: parsed.reason || (parsed.isValid ? 'Comprobante valido.' : 'El comprobante no parece valido.'),
+        detectedAmount: typeof parsed.detectedAmount === 'number' ? parsed.detectedAmount : null,
+        payerName: typeof parsed.payerName === 'string' ? parsed.payerName : null,
+        payerFormalId: typeof parsed.payerFormalId === 'string' ? parsed.payerFormalId : null,
+        paymentTimestamp: typeof parsed.paymentTimestamp === 'string' ? parsed.paymentTimestamp : null,
+        transactionId: typeof parsed.transactionId === 'string' ? parsed.transactionId.trim() : null,
+        confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0
+      };
+    } catch (error) {
+      logger.warn('OpenAI validatePaymentProof fallback triggered', { error: error.message });
+      return {
+        isValid: false,
+        reason: 'No pude validar el comprobante en este momento. Puede reenviarlo en unos instantes.',
+        detectedAmount: null,
+        payerName: null,
+        payerFormalId: null,
+        paymentTimestamp: null,
+        transactionId: null,
+        confidence: 0
+      };
+    }
+  }
+
   return {
     classifyIntent,
     answerFaq,
-    craftBookingReply
+    craftBookingReply,
+    validatePaymentProof
   };
 }
 

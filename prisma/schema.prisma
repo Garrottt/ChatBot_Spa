@@ -13,10 +13,32 @@ enum BookingStatus {
   CANCELLED
 }
 
+enum PaymentMethod {
+  IN_PERSON_DEPOSIT
+  CARD_LINK
+  BANK_TRANSFER
+}
+
+enum PaymentStatus {
+  NOT_REQUIRED
+  PENDING
+  PROOF_SUBMITTED
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum PaymentProofStatus {
+  PENDING
+  VALID
+  INVALID
+}
+
 model Client {
   id              String         @id @default(cuid())
   whatsappNumber  String         @unique
   name            String?
+  lastName        String?
   formalId        String?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
@@ -73,10 +95,23 @@ model Booking {
   clientId            String
   serviceId           String
   status              BookingStatus   @default(PENDING)
+  paymentMethod       PaymentMethod?
+  paymentStatus       PaymentStatus   @default(PENDING)
+  paymentProofStatus  PaymentProofStatus @default(PENDING)
+  payerName           String?
+  payerLastName       String?
+  payerFormalId       String?
+  payerEmail          String?
   scheduledAt         DateTime
   endAt               DateTime
+  holdExpiresAt       DateTime?
   notes               String?
+  depositAmount       Int             @default(10000)
   calendarEventId     String?
+  reminderSentAt      DateTime?
+  paymentProofReceivedAt DateTime?
+  paymentProofMetadata   Json?
+  paymentProofValidation Json?
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
   client              Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)

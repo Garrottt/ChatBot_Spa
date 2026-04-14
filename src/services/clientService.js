@@ -4,11 +4,11 @@ function createClientService({ prisma }) {
       where: { whatsappNumber }
     });
 
-    if (existing) {
-      if (!existing.name && name) {
-        return prisma.client.update({
-          where: { id: existing.id },
-          data: { name }
+      if (existing) {
+        if (!existing.name && name) {
+          return prisma.client.update({
+            where: { id: existing.id },
+            data: { name }
         });
       }
 

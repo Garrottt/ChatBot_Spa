@@ -1,0 +1,47 @@
+const { buildReply } = require('./helpers');
+
+function createFaqFlow({ openAIService, serviceCatalogService }) {
+  function buildConsultationWelcomeReply(collectedData) {
+    return buildReply({
+      intent: 'faq',
+      step: 'consultation_open',
+      text: 'Puede hacerme cualquier pregunta sobre el spa. Yo resolvere sus dudas con gusto.',
+      collectedData
+    });
+  }
+
+  async function answerQuestion(question, collectedData) {
+    const services = await serviceCatalogService.listActiveServices();
+    const text = await openAIService.answerFaq(question, services);
+
+    return buildReply({
+      intent: 'faq',
+      step: 'answered',
+      text,
+      collectedData
+    });
+  }
+
+  async function buildFaqReply(topic, collectedData) {
+    const textByTopic = {
+      horarios: 'cuales son los horarios del spa',
+      ubicacion: 'donde se encuentra el spa',
+      servicios: 'que servicios ofrecen',
+      contacto: 'cual es el telefono de contacto',
+      politicas: 'cual es la politica de cancelacion',
+      instagram: 'cuales son sus redes sociales',
+      pagos: 'cuales son los medios de pago',
+      estacionamiento: 'tienen estacionamiento'
+    };
+
+    return answerQuestion(textByTopic[topic] || topic, collectedData);
+  }
+
+  return {
+    answerQuestion,
+    buildConsultationWelcomeReply,
+    buildFaqReply
+  };
+}
+
+module.exports = { createFaqFlow };

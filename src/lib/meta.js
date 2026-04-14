@@ -10,6 +10,7 @@ function createMetaClient(overrides = {}) {
     baseURL: `https://graph.facebook.com/${env.metaApiVersion}`,
     timeout: 10000
   });
+  const binaryHttpClient = overrides.binaryHttpClient || axios;
 
   function verifySignature(signatureHeader, rawBody) {
     if (!env.metaAppSecret || !signatureHeader || !rawBody) {
@@ -87,6 +88,48 @@ function createMetaClient(overrides = {}) {
     });
   }
 
+  async function getMediaMetadata(mediaId) {
+    if (!env.metaAccessToken || !mediaId) {
+      throw new AppError('No pude acceder al archivo enviado por WhatsApp.', 502);
+    }
+
+    const response = await httpClient.get(`/${mediaId}`, {
+      headers: {
+        Authorization: `Bearer ${env.metaAccessToken}`
+      }
+    });
+
+    return response.data;
+  }
+
+  async function downloadMedia(mediaId) {
+    try {
+      const metadata = await getMediaMetadata(mediaId);
+      const response = await binaryHttpClient.get(metadata.url, {
+        responseType: 'arraybuffer',
+        headers: {
+          Authorization: `Bearer ${env.metaAccessToken}`
+        }
+      });
+
+      return {
+        buffer: Buffer.from(response.data),
+        mimeType: metadata.mime_type || response.headers['content-type'] || null,
+        sha256: metadata.sha256 || null,
+        id: mediaId
+      };
+    } catch (error) {
+      logger.error('Meta downloadMedia failed', {
+        mediaId,
+        status: error.response?.status || null,
+        data: error.response?.data || null,
+        message: error.message
+      });
+
+      throw new AppError('No pude descargar el comprobante enviado por WhatsApp.', 502);
+    }
+  }
+
   async function sendPayload(to, payload) {
     if (!env.metaAccessToken || !env.metaPhoneNumberId) {
       logger.warn('Meta credentials missing, skipping outbound message', { to, payload });
@@ -127,7 +170,9 @@ function createMetaClient(overrides = {}) {
     normalizeMessages,
     sendTextMessage,
     sendButtonsMessage,
-    sendListMessage
+    sendListMessage,
+    getMediaMetadata,
+    downloadMedia
   };
 }
 
@@ -145,7 +190,8 @@ function normalizeMessage(message, value) {
     return {
       ...common,
       text: message.text?.body || '',
-      selectedId: null
+      selectedId: null,
+      media: null
     };
   }
 
@@ -157,14 +203,30 @@ function normalizeMessage(message, value) {
     return {
       ...common,
       text: selected?.title || '',
-      selectedId: selected?.id || null
+      selectedId: selected?.id || null,
+      media: null
+    };
+  }
+
+  if (message.type === 'image') {
+    return {
+      ...common,
+      text: message.image?.caption || '',
+      selectedId: null,
+      media: {
+        id: message.image?.id || null,
+        mimeType: message.image?.mime_type || null,
+        sha256: message.image?.sha256 || null,
+        caption: message.image?.caption || ''
+      }
     };
   }
 
   return {
     ...common,
     text: '',
-    selectedId: null
+    selectedId: null,
+    media: null
   };
 }
 

@@ -1,5 +1,26 @@
 const dayjs = require('dayjs');
+
 const { AppError } = require('../lib/errors');
+const { createBookingFlow } = require('../flows/booking.flow');
+const { createFaqFlow } = require('../flows/faq.flow');
+const {
+  asksForBusinessInfo,
+  asksForTimeRemaining,
+  buildReply,
+  inferDeterministicIntent,
+  inferPaymentMethod,
+  looksLikeDate,
+  looksLikeEmail,
+  looksLikeFormalId,
+  looksLikeName,
+  looksLikeTime,
+  normalizeCollectedData,
+  parseSelectedAction,
+  resolveServiceSelection,
+  wantsMainMenu
+} = require('../flows/helpers');
+const { createServicesFlow } = require('../flows/services.flow');
+const { createWelcomeFlow } = require('../flows/welcome.flow');
 
 function createChatOrchestrator({
   openAIService,
@@ -10,6 +31,14 @@ function createChatOrchestrator({
   serviceCatalogService,
   metaClient
 }) {
+  const welcomeFlow = createWelcomeFlow();
+  const servicesFlow = createServicesFlow({ serviceCatalogService });
+  const faqFlow = createFaqFlow({ openAIService, serviceCatalogService });
+  const bookingFlow = createBookingFlow({
+    bookingService,
+    servicesFlow
+  });
+
   async function handleIncomingMessage(message) {
     const existingIncomingMessage = await messageService.findIncomingByProviderId(message.providerMessageId);
     if (existingIncomingMessage) {
@@ -30,12 +59,14 @@ function createChatOrchestrator({
     await messageService.createIncomingMessage({
       conversationId: conversation.id,
       clientId: client.id,
-      content: message.text || message.selectedId || '',
+      content: message.text || message.selectedId || message.media?.caption || '',
       providerId: message.providerMessageId,
+      messageType: message.type,
       metadata: {
         timestamp: message.timestamp,
         type: message.type,
-        selectedId: message.selectedId || null
+        selectedId: message.selectedId || null,
+        media: message.media || null
       }
     });
 
@@ -46,8 +77,7 @@ function createChatOrchestrator({
       reply = await routeConversation({
         client,
         conversation,
-        text: message.text || '',
-        selectedId: message.selectedId || null,
+        message,
         intentResult
       });
     } catch (error) {
@@ -86,46 +116,38 @@ function createChatOrchestrator({
     return reply;
   }
 
-  async function routeConversation({ client, conversation, text, selectedId, intentResult }) {
+  async function routeConversation({ client, conversation, message, intentResult }) {
+    const text = message.text || '';
     const lowerText = String(text || '').toLowerCase();
     const collectedData = normalizeCollectedData(conversation.collectedData);
-    const selectedAction = parseSelectedAction(selectedId);
+    const selectedAction = parseSelectedAction(message.selectedId);
     const matchedService = await resolveServiceSelection({ selectedAction, text, serviceCatalogService });
     const deterministicIntent = inferDeterministicIntent(lowerText, matchedService, selectedAction);
     const resolvedIntent = deterministicIntent || intentResult.intent;
+    const paymentMethod = inferPaymentMethod(text, selectedAction);
 
-    if (wantsMainMenu(lowerText) || selectedAction?.type === 'menu' && selectedAction.value === 'main') {
-      return buildMainMenuReply();
+    if (wantsMainMenu(lowerText) || (selectedAction?.type === 'menu' && selectedAction.value === 'main')) {
+      return welcomeFlow.buildMainMenuReply();
     }
 
     if (selectedAction?.type === 'faq') {
-      return await buildFaqReply(selectedAction.value, collectedData);
+      return faqFlow.buildFaqReply(selectedAction.value, collectedData);
     }
 
     if (selectedAction?.type === 'menu' && selectedAction.value === 'book') {
-      return await startBookingFlow(client, collectedData);
+      return bookingFlow.startBookingFlow(client, {});
     }
 
     if (selectedAction?.type === 'menu' && selectedAction.value === 'services') {
-      return await buildServiceListReply(collectedData);
+      return servicesFlow.buildServiceListReply(collectedData);
+    }
+
+    if (selectedAction?.type === 'menu' && selectedAction.value === 'consult') {
+      return faqFlow.buildConsultationWelcomeReply(collectedData);
     }
 
     if (selectedAction?.type === 'menu' && selectedAction.value === 'manage') {
-      return buildReply({
-        intent: 'manage_booking',
-        step: 'manage_booking',
-        text: 'Puede gestionar sus reservas por este chat indicando si desea cancelar o reagendar. Si prefiere asistencia directa, tambien puede contactarnos al telefono del spa.',
-        collectedData,
-        outbound: {
-          kind: 'buttons',
-          bodyText: 'Gestion de reservas',
-          buttons: [
-            { id: 'menu:main', title: 'Menu principal' },
-            { id: 'faq:contacto', title: 'Contacto' },
-            { id: 'faq:politicas', title: 'Politicas' }
-          ]
-        }
-      });
+      return handleCancelBookingIntent(client.id);
     }
 
     if (selectedAction?.type === 'menu' && selectedAction.value === 'exit') {
@@ -137,307 +159,608 @@ function createChatOrchestrator({
       });
     }
 
+    if (selectedAction?.type === 'cancelbooking') {
+      const upcomingBookings = await bookingService.findUpcomingBookingsForClient(client.id, { limit: 10 });
+      const selectedBooking = upcomingBookings.find((booking) => booking.id === selectedAction.value);
+
+      if (!selectedBooking) {
+        return buildReply({
+          intent: 'cancel_booking',
+          step: 'cancel_booking_missing',
+          text: 'No encontre una reserva activa con esa opcion. Si quiere, puedo mostrarle sus proximas citas.',
+          collectedData
+        });
+      }
+
+      return buildReply({
+        intent: 'cancel_booking',
+        step: 'awaiting_cancel_confirmation',
+        text: `Va a cancelar ${selectedBooking.service.name} del ${dayjs(selectedBooking.scheduledAt).format('YYYY-MM-DD HH:mm')}. Desea confirmar la cancelacion?`,
+        collectedData,
+        outbound: {
+          kind: 'buttons',
+          bodyText: `Confirmar cancelacion de ${selectedBooking.service.name} el ${dayjs(selectedBooking.scheduledAt).format('YYYY-MM-DD HH:mm')}`,
+          buttons: [
+            { id: `cancelconfirm:${selectedBooking.id}`, title: 'Confirmar' },
+            { id: 'menu:main', title: 'Volver' }
+          ]
+        }
+      });
+    }
+
+    if (selectedAction?.type === 'cancelconfirm') {
+      const cancelledBooking = await bookingService.cancelBooking(selectedAction.value);
+
+      const wasPaid = cancelledBooking.paymentStatus === 'APPROVED';
+      const baseText = `Su cita de ${cancelledBooking.service.name} para el ${dayjs(cancelledBooking.scheduledAt).format('YYYY-MM-DD HH:mm')} fue cancelada correctamente.`;
+      const refundNote = wasPaid
+        ? `\n\nComo ya habia realizado un abono para esta reserva, el equipo del spa se pondra en contacto con usted a la brevedad para solicitar sus datos bancarios y gestionar la devolucion del monto abonado.`
+        : '';
+
+      return buildReply({
+        intent: 'cancel_booking',
+        step: 'cancelled',
+        text: `${baseText}${refundNote}`,
+        collectedData: {}
+      });
+    }
+
+    if (message.media && ['awaiting_payment_proof', 'payment_proof_rejected_retry', 'awaiting_partial_supplement'].includes(conversation.currentStep)) {
+      return handlePaymentProofSubmission({
+        client,
+        conversation,
+        message,
+        collectedData
+      });
+    }
+
+    if (!text && !message.selectedId && !message.media) {
+      return welcomeFlow.buildMainMenuReply();
+    }
+
+    // Seleccion de servicio (debe ir ANTES del check canStartBookingFromContext)
+    if (matchedService || selectedAction?.type === 'service') {
+      if (!matchedService) {
+        return buildReply({
+          intent: 'booking',
+          step: 'awaiting_service',
+          text: '✨ Elija uno de nuestros servicios para ver sus detalles.',
+          collectedData,
+          outbound: await servicesFlow.createServiceListOutbound()
+        });
+      }
+      return servicesFlow.buildServiceDetailReply(matchedService, collectedData);
+    }
+
+    // Cliente presiono "Reservar" desde el detalle del servicio
+    if (selectedAction?.type === 'bookservice') {
+      const serviceToBook = await serviceCatalogService.getServiceById(selectedAction.value).catch(() => null);
+      if (serviceToBook) {
+        return bookingFlow.buildServiceSelectionReply(client, serviceToBook, collectedData);
+      }
+      return buildReply({
+        intent: 'booking',
+        step: 'awaiting_service',
+        text: '😅 No encontre ese servicio. Por favor elija uno de la lista.',
+        collectedData,
+        outbound: await servicesFlow.createServiceListOutbound()
+      });
+    }
+
+    // Cliente presiono "Consultas" desde el detalle del servicio → modo FAQ con contexto
+    if (selectedAction?.type === 'askservice') {
+      const serviceToAsk = await serviceCatalogService.getServiceById(selectedAction.value).catch(() => null);
+      const serviceName = serviceToAsk?.name || 'ese servicio';
+      return buildReply({
+        intent: 'faq',
+        step: 'faq_context',
+        text: `💬 ¡Por supuesto! ¿Que desea saber sobre *${serviceName}*? Cuénteme su duda y con gusto le respondo.`,
+        collectedData: {
+          ...collectedData,
+          serviceId: selectedAction.value
+        }
+      });
+    }
+
+    if (resolvedIntent === 'booking' && canStartBookingFromContext(conversation.currentStep)) {
+      return bookingFlow.startBookingFlow(client, collectedData);
+    }
+
+    // Consulta de tiempo restante para el pago
+    const paymentSteps = ['awaiting_payment_proof', 'awaiting_partial_supplement', 'payment_proof_rejected_retry'];
+    if (paymentSteps.includes(conversation.currentStep) && text && asksForTimeRemaining(lowerText)) {
+      const bookingId = conversation.lastBookingId || collectedData.bookingId;
+      if (bookingId) {
+        const holdBooking = await bookingService.getBookingById(bookingId).catch(() => null);
+        if (holdBooking && holdBooking.holdExpiresAt) {
+          const minutesLeft = Math.ceil(dayjs(holdBooking.holdExpiresAt).diff(dayjs(), 'second') / 60);
+          if (minutesLeft <= 0) {
+            return buildReply({
+              intent: 'booking',
+              step: 'main_menu',
+              text: 'Su tiempo para confirmar la cita ya expiro y el horario fue liberado. Escriba *menu* para volver al menu principal y realizar una nueva reserva.',
+              collectedData: {}
+            });
+          }
+          const minuteWord = minutesLeft === 1 ? 'minuto' : 'minutos';
+          return buildReply({
+            intent: 'booking',
+            step: conversation.currentStep,
+            text: `Le quedan aproximadamente *${minutesLeft} ${minuteWord}* para enviar su comprobante y confirmar su cita.`,
+            collectedData,
+            lastBookingId: bookingId
+          });
+        }
+      }
+    }
+
+    // Catch-all: cualquier mensaje de texto durante un paso de pago no debe salir del contexto.
+    // En lugar de caer al menu principal, recordar al cliente que envie el comprobante.
+    if (paymentSteps.includes(conversation.currentStep) && text) {
+      return buildReply({
+        intent: 'booking',
+        step: conversation.currentStep,
+        text: '⏳ Su reserva sigue activa. Cuando realize el pago, envie una *foto o captura del comprobante* aqui para confirmarlo.\n\nSi quiere saber cuanto tiempo le queda, escriba *"cuanto tiempo me queda"*.',
+        collectedData,
+        lastBookingId: conversation.lastBookingId || collectedData.bookingId || null
+      });
+    }
+
+    if (conversation.currentStep === 'awaiting_name' && looksLikeName(text)) {
+      const fullName = splitFullName(text);
+      if (!fullName) {
+        return buildReply({
+          intent: 'booking',
+          step: 'awaiting_name',
+          text: 'Necesito que me indique su nombre y apellidos completos para continuar con la reserva.',
+          collectedData
+        });
+      }
+
+      await clientService.updateClient(client.id, fullName);
+
+      if (!client.formalId) {
+        return buildReply({
+          intent: 'booking',
+          step: 'awaiting_formal_id',
+          text: 'Perfecto. Ahora necesito su RUT o identificador antes de ofrecerle fechas disponibles.',
+          collectedData
+        });
+      }
+
+      if (collectedData.date && collectedData.time) {
+        return bookingFlow.buildPayerRoleReply({
+          ...client,
+          ...fullName
+        }, collectedData);
+      }
+
+      return bookingFlow.buildDatePrompt(collectedData);
+    }
+
+    if (conversation.currentStep === 'awaiting_last_name' && looksLikeName(text)) {
+      await clientService.updateClient(client.id, { lastName: text.trim() });
+
+      if (!client.formalId) {
+        return buildReply({
+          intent: 'booking',
+          step: 'awaiting_formal_id',
+          text: 'Perfecto. Ahora necesito su RUT o identificador antes de ofrecerle fechas disponibles.',
+          collectedData
+        });
+      }
+
+      return bookingFlow.buildDatePrompt(collectedData);
+    }
+
+    if (conversation.currentStep === 'awaiting_formal_id' && looksLikeFormalId(text)) {
+      await clientService.updateClient(client.id, { formalId: text.trim() });
+      if (collectedData.date && collectedData.time) {
+        return bookingFlow.buildPayerRoleReply({
+          ...client,
+          formalId: text.trim()
+        }, collectedData);
+      }
+
+      return bookingFlow.buildDatePrompt(collectedData);
+    }
+
+    if (conversation.currentStep === 'editing_payer_name' && looksLikeName(text)) {
+      const fullName = splitFullName(text);
+      if (!fullName) {
+        return buildReply({
+          intent: 'booking',
+          step: 'editing_payer_name',
+          text: 'Necesito su nombre y apellidos completos para actualizar el registro.',
+          collectedData
+        });
+      }
+
+      await clientService.updateClient(client.id, fullName);
+      return buildReply({
+        intent: 'booking',
+        step: 'editing_payer_formal_id',
+        text: 'Nombre actualizado. Ahora indique su RUT o identificador para corregirlo.',
+        collectedData: {
+          ...collectedData,
+          payerName: fullName.name,
+          payerLastName: fullName.lastName
+        }
+      });
+    }
+
+    if (conversation.currentStep === 'editing_payer_formal_id' && looksLikeFormalId(text)) {
+      await clientService.updateClient(client.id, { formalId: text.trim() });
+      const updatedClient = { ...client, ...splitFullName([collectedData.payerName, collectedData.payerLastName].filter(Boolean).join(' ')) || {}, formalId: text.trim() };
+      return bookingFlow.buildPayerSummaryReply(updatedClient, collectedData);
+    }
+
+    if (['awaiting_payer_role', 'awaiting_payer_confirmation'].includes(conversation.currentStep)) {
+      if (selectedAction?.type === 'payer' && selectedAction.value === 'self') {
+        return bookingFlow.buildPayerSummaryReply(client, collectedData);
+      }
+
+      if (selectedAction?.type === 'payer' && selectedAction.value === 'other') {
+        return buildReply({
+          intent: 'booking',
+          step: 'awaiting_payer_name',
+          text: 'Perfecto. Indique el nombre y apellidos de la persona que realizara el pago.',
+          collectedData: {
+            ...collectedData,
+            payerName: null,
+            payerLastName: null,
+            payerFormalId: null,
+            payerEmail: null
+          }
+        });
+      }
+    }
+
+    if (conversation.currentStep === 'awaiting_payer_confirmation' && selectedAction?.type === 'payerconfirm' && selectedAction.value === 'self') {
+      return bookingFlow.buildPaymentMethodReply(collectedData);
+    }
+
+    if (['awaiting_payer_role', 'awaiting_payer_confirmation'].includes(conversation.currentStep) && selectedAction?.type === 'payeredit' && selectedAction.value === 'self') {
+      return buildReply({
+        intent: 'booking',
+        step: 'editing_payer_name',
+        text: 'Entendido. Indique su nombre y apellidos completos para actualizarlos.',
+        collectedData
+      });
+    }
+
+    if (conversation.currentStep === 'awaiting_payer_name' && looksLikeName(text)) {
+      const fullName = splitFullName(text);
+      if (!fullName) {
+        return buildReply({
+          intent: 'booking',
+          step: 'awaiting_payer_name',
+          text: 'Necesito el nombre y apellidos completos de la persona que realizara el pago.',
+          collectedData
+        });
+      }
+
+      return buildReply({
+        intent: 'booking',
+        step: 'awaiting_payer_formal_id',
+        text: 'Gracias. Ahora indique el RUT o identificador de la persona que realizara el pago.',
+        collectedData: {
+          ...collectedData,
+          payerName: fullName.name,
+          payerLastName: fullName.lastName
+        }
+      });
+    }
+
+    if (conversation.currentStep === 'awaiting_payer_formal_id' && looksLikeFormalId(text)) {
+      return buildReply({
+        intent: 'booking',
+        step: 'awaiting_payer_email',
+        text: 'Perfecto. Ahora necesito el correo electronico de la persona que realizara el pago.',
+        collectedData: {
+          ...collectedData,
+          payerFormalId: text.trim()
+        }
+      });
+    }
+
+    if (conversation.currentStep === 'awaiting_payer_email' && looksLikeEmail(text)) {
+      return bookingFlow.buildPaymentMethodReply({
+        ...collectedData,
+        payerEmail: text.trim().toLowerCase()
+      });
+    }
+
+    if (conversation.currentStep === 'awaiting_payment_method' && paymentMethod) {
+      return bookingFlow.initiatePaymentCollection({
+        client,
+        collectedData,
+        paymentMethod
+      });
+    }
+
+    if (['awaiting_payment_proof', 'payment_proof_rejected_retry'].includes(conversation.currentStep)) {
+      return buildReply({
+        intent: 'booking',
+        step: conversation.currentStep,
+        text: 'Para validar el abono necesito que envie una foto o captura del comprobante dentro del tiempo indicado.',
+        collectedData,
+        lastBookingId: conversation.lastBookingId || collectedData.bookingId || null
+      });
+    }
+
+    // Fallback: si el paso es awaiting_service y no hay servicio reconocido, mostrar lista
+    if (conversation.currentStep === 'awaiting_service') {
+      return buildReply({
+        intent: 'booking',
+        step: 'awaiting_service',
+        text: '✨ Elija uno de nuestros servicios para ver sus detalles.',
+        collectedData,
+        outbound: await servicesFlow.createServiceListOutbound()
+      });
+    }
+
     if (selectedAction?.type === 'slot') {
-      return await confirmBookingTime({
+      return bookingFlow.confirmBookingTime({
         client,
         collectedData,
         selectedValue: selectedAction.value
       });
     }
 
-    if (selectedAction?.type === 'confirm') {
-      if (selectedAction.value === 'restart') {
-        return buildReply({
-          intent: 'booking',
-          step: 'awaiting_service',
-          text: 'Claro, partamos de nuevo. Elige el servicio que quieres reservar.',
-          collectedData: {},
-          outbound: await createServiceListOutbound()
-        });
-      }
-    }
-
-    if (!text && !selectedId) {
-      return buildMainMenuReply();
-    }
-
-    if (asksForBusinessInfo(lowerText)) {
-      if (/(servicio|servicios|precio|precios)/.test(lowerText)) {
-        return await buildServiceListReply(collectedData);
-      }
-
-      const services = await serviceCatalogService.listActiveServices();
-      const textReply = await openAIService.answerFaq(text, services);
-      return buildReply({ intent: 'faq', step: 'answered', text: textReply, collectedData });
-    }
-
-    if (conversation.currentStep === 'awaiting_name' && looksLikeName(text)) {
-      await clientService.updateClient(client.id, { name: text.trim() });
-      return buildReply({
-        intent: 'booking',
-        step: 'awaiting_formal_id',
-        text: 'Gracias. Ahora necesito tu RUT o identificador para dejar la reserva registrada.',
+    if (selectedAction?.type === 'date') {
+      return bookingFlow.buildDateReply({
+        serviceId: collectedData.serviceId,
+        text: selectedAction.value,
         collectedData
       });
     }
 
-    if ((conversation.currentStep === 'awaiting_formal_id' || !client.formalId) && looksLikeFormalId(text)) {
-      await clientService.updateClient(client.id, { formalId: text.trim() });
-      return buildReply({
-        intent: 'booking',
-        step: 'awaiting_service',
-        text: 'Perfecto. Ya tengo tus datos. Elige el servicio que quieres reservar.',
-        collectedData,
-        outbound: await createServiceListOutbound()
-      });
-    }
-
-    if (conversation.currentStep === 'awaiting_service' || matchedService || selectedAction?.type === 'service') {
-      if (!matchedService) {
-        return buildReply({
-          intent: 'booking',
-          step: 'awaiting_service',
-          text: 'Elige uno de nuestros servicios disponibles.',
-          collectedData,
-          outbound: await createServiceListOutbound()
-        });
-      }
-
-      return buildReply({
-        intent: 'booking',
-        step: 'awaiting_date',
-        text: `Excelente, agendemos ${matchedService.name}. Indica la fecha que prefieres en formato YYYY-MM-DD.`,
-        collectedData: {
-          ...collectedData,
-          serviceId: matchedService.id
-        }
-      });
-    }
-
     if (conversation.currentStep === 'awaiting_date' || looksLikeDate(lowerText)) {
-      const serviceId = collectedData.serviceId;
-      if (!serviceId) {
-        return buildReply({
-          intent: 'booking',
-          step: 'awaiting_service',
-          text: 'Antes de buscar horarios necesito saber que servicio quieres reservar.',
-          collectedData,
-          outbound: await createServiceListOutbound()
-        });
-      }
-
-      const normalizedDate = normalizeDateInput(text);
-      if (!looksLikeDate(normalizedDate) || !dayjs(normalizedDate).isValid()) {
-        return buildReply({
-          intent: 'booking',
-          step: 'awaiting_date',
-          text: 'Necesito la fecha en formato YYYY-MM-DD, por ejemplo 2026-04-12.',
-          collectedData
-        });
-      }
-
-      const quote = await bookingService.quoteAvailability({
-        serviceId,
-        date: normalizedDate
-      });
-
-      const slotRows = quote.slots.slice(0, 10).map((slot) => ({
-        id: `slot:${normalizeSlotValue(slot.startsAt)}`,
-        title: dayjs(slot.startsAt).format('HH:mm'),
-        description: `${quote.service.name} - ${quote.service.durationMinutes} min`
-      }));
-
-      return buildReply({
-        intent: 'booking',
-        step: 'awaiting_time',
-        text: `Estos son algunos horarios disponibles para ${quote.service.name} el ${normalizedDate}. Elige una hora de la lista.`,
-        collectedData: {
-          ...collectedData,
-          date: normalizedDate
-        },
-        outbound: {
-          kind: 'list',
-          bodyText: `Horarios disponibles para ${quote.service.name} el ${normalizedDate}`,
-          buttonText: 'Ver horarios',
-          sections: [
-            {
-              title: 'Horas disponibles',
-              rows: slotRows
-            }
-          ]
-        }
+      return bookingFlow.buildDateReply({
+        serviceId: collectedData.serviceId,
+        text,
+        collectedData
       });
     }
 
     if (conversation.currentStep === 'awaiting_time' || looksLikeTime(lowerText)) {
-      return await confirmBookingTime({
+      return bookingFlow.confirmBookingTime({
         client,
         collectedData,
         selectedValue: text.trim()
       });
     }
 
+    if (asksForBusinessInfo(lowerText)) {
+      return faqFlow.answerQuestion(text, collectedData);
+    }
+
+    if (conversation.currentIntent === 'faq' && text) {
+      return faqFlow.answerQuestion(text, collectedData);
+    }
+
     if (resolvedIntent === 'faq') {
-      const services = await serviceCatalogService.listActiveServices();
-      const textReply = await openAIService.answerFaq(text, services);
-      return buildReply({ intent: 'faq', step: 'answered', text: textReply, collectedData });
+      return faqFlow.answerQuestion(text, collectedData);
     }
 
-    if (resolvedIntent === 'booking') {
-      return await startBookingFlow(client, collectedData);
+    if (resolvedIntent === 'cancel_booking') {
+      return handleCancelBookingIntent(client.id);
     }
 
-    return buildMainMenuReply();
+    return welcomeFlow.buildMainMenuReply();
   }
 
-  async function startBookingFlow(client, collectedData) {
-    const missingFields = [];
-    if (!client.name) {
-      missingFields.push('tu nombre');
-    }
-    if (!client.formalId) {
-      missingFields.push('tu RUT o identificador');
-    }
-
-    const nextStep = !client.name ? 'awaiting_name' : (!client.formalId ? 'awaiting_formal_id' : 'awaiting_service');
-    if (missingFields.length) {
-      return buildReply({
-        intent: 'booking',
-        step: nextStep,
-        text: `Para ayudarte con la reserva necesito ${missingFields.join(' y ')}.`,
-        collectedData
-      });
-    }
-
-    return buildReply({
-      intent: 'booking',
-      step: 'awaiting_service',
-      text: 'Perfecto. Elige el servicio que quieres reservar.',
-      collectedData,
-      outbound: await createServiceListOutbound()
-    });
-  }
-
-  async function buildFaqReply(topic, collectedData) {
-    const services = await serviceCatalogService.listActiveServices();
-    const textByTopic = {
-      horarios: 'horarios',
-      ubicacion: 'donde estan ubicados',
-      servicios: 'que servicios ofrecen',
-      contacto: 'cual es el telefono de contacto',
-      politicas: 'cual es la politica de cancelacion',
-      instagram: 'cuales son sus redes sociales'
-    };
-    const textReply = await openAIService.answerFaq(textByTopic[topic] || topic, services);
-    return buildReply({ intent: 'faq', step: 'answered', text: textReply, collectedData });
-  }
-
-  async function buildServiceListReply(collectedData) {
-    return buildReply({
-      intent: 'booking',
-      step: 'awaiting_service',
-      text: 'Estos son nuestros servicios disponibles. Elige uno para continuar.',
-      collectedData,
-      outbound: await createServiceListOutbound()
-    });
-  }
-
-  async function createServiceListOutbound() {
-    const services = await serviceCatalogService.listActiveServices();
-    return {
-      kind: 'list',
-      bodyText: 'Selecciona el servicio que quieres reservar',
-      buttonText: 'Ver servicios',
-      sections: [
-        {
-          title: 'Servicios del spa',
-          rows: services.slice(0, 10).map((service) => ({
-            id: `service:${service.id}`,
-            title: service.name,
-            description: `${service.durationMinutes} min - ${service.price} ${service.currency}`
-          }))
-        }
-      ]
-    };
-  }
-
-  async function confirmBookingTime({ client, collectedData, selectedValue }) {
-    const serviceId = collectedData.serviceId;
-    const date = collectedData.date;
-
-    if (!serviceId || !date) {
+  async function handlePaymentProofSubmission({ client, conversation, message, collectedData }) {
+    const bookingId = conversation.lastBookingId || collectedData.bookingId;
+    if (!bookingId) {
       return buildReply({
         intent: 'booking',
         step: 'awaiting_service',
-        text: 'Se perdio el contexto de la reserva. Partamos de nuevo eligiendo un servicio.',
+        text: 'No encuentro una reserva temporal activa para validar el pago. Partamos nuevamente seleccionando un servicio.',
         collectedData: {},
-        outbound: await createServiceListOutbound()
+        outbound: await servicesFlow.createServiceListOutbound()
       });
     }
 
-    const normalizedTime = normalizeTimeInput(selectedValue);
-    if (!looksLikeTime(normalizedTime)) {
+    const downloadedMedia = await metaClient.downloadMedia(message.media.id);
+    const proofMetadata = {
+      providerMessageId: message.providerMessageId,
+      mimeType: downloadedMedia.mimeType,
+      sizeBytes: downloadedMedia.buffer.length,
+      mediaId: message.media.id,
+      caption: message.media.caption || ''
+    };
+    const booking = await bookingService.recordPaymentProofSubmission(bookingId, proofMetadata);
+    const validation = await openAIService.validatePaymentProof({
+      imageBuffer: downloadedMedia.buffer,
+      mimeType: downloadedMedia.mimeType,
+      amount: booking.depositAmount,
+      currency: booking.service.currency,
+      expectedPayerName: getExpectedPayerName(booking),
+      expectedFormalId: booking.payerFormalId || booking.client.formalId,
+      paymentWindowStartsAt: dayjs(booking.createdAt).toISOString(),
+      paymentWindowEndsAt: booking.holdExpiresAt ? dayjs(booking.holdExpiresAt).toISOString() : null
+    });
+
+    const proofRejectionReason = resolvePaymentProofRejectionReason(booking, validation);
+
+    // Detectar comprobante duplicado por Nº de Solicitud / Folio / ID de transaccion
+    const usedTransactionIds = Array.isArray(collectedData.usedTransactionIds)
+      ? collectedData.usedTransactionIds
+      : [];
+    const incomingTxId = validation.transactionId;
+
+    if (incomingTxId && usedTransactionIds.includes(incomingTxId)) {
       return buildReply({
         intent: 'booking',
-        step: 'awaiting_time',
-        text: 'Necesito la hora en formato HH:mm o que la elijas desde la lista.',
-        collectedData
+        step: 'awaiting_partial_supplement',
+        text: `Este comprobante (N\u00ba de Solicitud ${incomingTxId}) ya fue recibido anteriormente y no puede usarse nuevamente. Por favor env\u00ede el comprobante de la transferencia adicional que realiz\u00f3.`,
+        collectedData: {
+          ...collectedData,
+          bookingId
+        },
+        lastBookingId: bookingId
       });
     }
 
-    const requestedDateTime = `${date}T${normalizedTime}:00-04:00`;
-    const booking = await bookingService.createBooking({
-      clientId: client.id,
-      serviceId,
-      scheduledAt: requestedDateTime
+    if (proofRejectionReason) {
+      const reason = proofRejectionReason;
+
+      await bookingService.rejectPaymentProof(bookingId, {
+        proofMetadata,
+        validation: {
+          ...validation,
+          reason
+        }
+      });
+
+      return buildReply({
+        intent: 'booking',
+        step: 'payment_proof_rejected_retry',
+        text: `⚠️ No pudimos validar su comprobante.\n\n*Motivo:* ${reason}\n\nSi tiene el comprobante a mano, puede reenviar una foto o captura mas clara. Su horario sigue reservado mientras el tiempo no expire. 📸`,
+        collectedData: {
+          ...collectedData,
+          bookingId
+        },
+        lastBookingId: bookingId
+      });
+    }
+
+    // Verificar si el monto detectado cubre lo que falta (considerando pagos parciales previos)
+    const partialAmountPaid = collectedData.partialAmountPaid || 0;
+    const effectiveMinimum = booking.depositAmount - partialAmountPaid;
+    const detectedAmount = validation.detectedAmount;
+
+    if (detectedAmount !== null && detectedAmount < effectiveMinimum) {
+      // Comprobante autentico pero monto insuficiente → ofrecer opciones
+      const newPartialTotal = partialAmountPaid + detectedAmount;
+      const stillNeeded = booking.depositAmount - newPartialTotal;
+
+      // Registrar el ID de transaccion para evitar que este comprobante sea reutilizado
+      const newUsedTransactionIds = incomingTxId
+        ? [...usedTransactionIds, incomingTxId]
+        : usedTransactionIds;
+
+      const partialText = partialAmountPaid > 0
+        ? `Con este comprobante acumula ${newPartialTotal} ${booking.service.currency} de los ${booking.depositAmount} ${booking.service.currency} requeridos.`
+        : `Recibimos su comprobante por ${detectedAmount} ${booking.service.currency}, pero el abono requerido es de ${booking.depositAmount} ${booking.service.currency}.`;
+
+      return buildReply({
+        intent: 'booking',
+        step: 'awaiting_partial_supplement',
+        text: `${partialText} Le faltan ${stillNeeded} ${booking.service.currency} para confirmar su hora.\n\nTiene dos opciones:\n\n1. Transferir los ${stillNeeded} ${booking.service.currency} restantes y enviar ese comprobante dentro del tiempo disponible.\n\n2. Transferir nuevamente el total de ${booking.depositAmount} ${booking.service.currency}. Lo que ya abono (${newPartialTotal} ${booking.service.currency}) sera descontado del pago final al llegar al spa.`,
+        collectedData: {
+          ...collectedData,
+          bookingId,
+          partialAmountPaid: newPartialTotal,
+          usedTransactionIds: newUsedTransactionIds
+        },
+        lastBookingId: bookingId
+      });
+    }
+
+    const confirmedBooking = await bookingService.confirmPendingBooking(bookingId, {
+      proofMetadata,
+      validation
     });
-    const paymentLink = await bookingService.ensurePaymentLink(booking.id);
+
+    // Calcular overpago: considerar abonos parciales previos acumulados
+    const totalPaidByClient = (partialAmountPaid || 0) + (detectedAmount !== null ? detectedAmount : 0);
+    const overpaidAmount = totalPaidByClient > confirmedBooking.depositAmount
+      ? totalPaidByClient - confirmedBooking.depositAmount
+      : 0;
+
+    const baseFallback = `Su cita para ${confirmedBooking.service.name} quedo confirmada para el ${dayjs(confirmedBooking.scheduledAt).format('YYYY-MM-DD HH:mm')}. Su pago fue validado correctamente y ya dejamos su hora reservada.`;
+    const overpaymentNote = overpaidAmount > 0
+      ? ` Notamos que en total abono ${totalPaidByClient} ${confirmedBooking.service.currency} (abono requerido: ${confirmedBooking.depositAmount} ${confirmedBooking.service.currency}). Conserve sus comprobantes: al llegar al spa le descontaremos los ${overpaidAmount} ${confirmedBooking.service.currency} adicionales del pago final.`
+      : (partialAmountPaid > 0 ? ` La suma de sus abonos cubre el total requerido.` : '');
+    const fallbackMessage = `${baseFallback}${overpaymentNote}`;
+
     const craftedMessage = await openAIService.craftBookingReply({
-      fallbackMessage: `Tu reserva para ${booking.service.name} quedo confirmada para el ${dayjs(booking.scheduledAt).format('YYYY-MM-DD HH:mm')}. Link de pago: ${paymentLink.url}`,
-      bookingId: booking.id,
-      serviceName: booking.service.name,
-      scheduledAt: booking.scheduledAt,
-      paymentLink: paymentLink.url
+      fallbackMessage,
+      bookingId: confirmedBooking.id,
+      serviceName: confirmedBooking.service.name,
+      scheduledAt: confirmedBooking.scheduledAt,
+      ...(overpaidAmount > 0 && {
+        overpaymentDetected: true,
+        totalPaid: totalPaidByClient,
+        depositRequired: confirmedBooking.depositAmount,
+        overpaymentToDiscount: overpaidAmount,
+        currency: confirmedBooking.service.currency
+      }),
+      ...(partialAmountPaid > 0 && overpaidAmount === 0 && {
+        partialPaymentsUsed: true,
+        totalPaid: totalPaidByClient,
+        depositRequired: confirmedBooking.depositAmount
+      })
     });
 
     return buildReply({
       intent: 'booking',
-      step: 'completed',
+      step: 'booking_confirmed',
       text: craftedMessage,
       collectedData: {},
-      lastBookingId: booking.id,
+      lastBookingId: confirmedBooking.id,
       outbound: {
         kind: 'buttons',
-        bodyText: `${craftedMessage}\n\n¿Quieres hacer otra gestion?`,
+        bodyText: `${craftedMessage}\n\nDesea realizar otra gestion?`,
         buttons: [
-          { id: 'confirm:restart', title: 'Nueva reserva' },
-          { id: 'faq:horarios', title: 'Horarios' },
-          { id: 'faq:ubicacion', title: 'Ubicacion' }
+          { id: 'menu:book', title: 'Nueva reserva' },
+          { id: 'menu:manage', title: 'Mis reservas' },
+          { id: 'menu:main', title: 'Menu' }
         ]
       }
     });
   }
 
-  function buildMainMenuReply() {
+  async function handleCancelBookingIntent(clientId) {
+    const upcomingBookings = await bookingService.findUpcomingBookingsForClient(clientId, { limit: 10 });
+
+    if (!upcomingBookings.length) {
+      return buildReply({
+        intent: 'cancel_booking',
+        step: 'cancel_booking_empty',
+        text: 'No encuentro reservas proximas confirmadas para cancelar.',
+        collectedData: {}
+      });
+    }
+
+    if (upcomingBookings.length === 1) {
+      const booking = upcomingBookings[0];
+      return buildReply({
+        intent: 'cancel_booking',
+        step: 'awaiting_cancel_confirmation',
+        text: `Encontre una reserva de ${booking.service.name} para el ${dayjs(booking.scheduledAt).format('YYYY-MM-DD HH:mm')}. Desea cancelarla?`,
+        collectedData: {},
+        outbound: {
+          kind: 'buttons',
+          bodyText: `Reserva encontrada: ${booking.service.name} el ${dayjs(booking.scheduledAt).format('YYYY-MM-DD HH:mm')}`,
+          buttons: [
+            { id: `cancelconfirm:${booking.id}`, title: 'Cancelar cita' },
+            { id: 'menu:main', title: 'Volver' }
+          ]
+        }
+      });
+    }
+
     return buildReply({
-      intent: 'menu',
-      step: 'main_menu',
-      text: 'Spa Ikigai Ovalle - Menu Principal',
+      intent: 'cancel_booking',
+      step: 'select_booking_to_cancel',
+      text: 'Estas son sus proximas reservas confirmadas. Elija cual quiere cancelar.',
       collectedData: {},
       outbound: {
         kind: 'list',
-        bodyText: '🌟 Spa Ikigai Ovalle - Menu Principal 🌟\n\n✨ ¿En que puedo ayudarle hoy?\n\nSeleccione una opcion del menu. Si en algun momento desea regresar aqui, puede escribir "volver".',
-        buttonText: 'Abrir menu',
+        bodyText: 'Seleccione la cita que desea cancelar',
+        buttonText: 'Ver reservas',
         sections: [
           {
-            title: 'Opciones principales',
-            rows: [
-              { id: 'menu:services', title: 'Ver servicios', description: 'Conozca nuestros tratamientos de bienestar' },
-              { id: 'menu:book', title: 'Reservar cita', description: 'Agende su momento de relax' },
-              { id: 'faq:contacto', title: 'Consultas', description: 'Preguntas sobre servicios, precios o informacion' },
-              { id: 'menu:manage', title: 'Gestionar reservas', description: 'Ver, cancelar o reagendar sus citas' },
-              { id: 'menu:exit', title: 'Salir', description: 'Cerrar la conversacion por ahora' }
-            ]
+            title: 'Reservas activas',
+            rows: upcomingBookings.slice(0, 10).map((booking) => ({
+              id: `cancelbooking:${booking.id}`,
+              title: booking.service.name,
+              description: dayjs(booking.scheduledAt).format('YYYY-MM-DD HH:mm')
+            }))
           }
         ]
       }
@@ -447,105 +770,6 @@ function createChatOrchestrator({
   return {
     handleIncomingMessage
   };
-}
-
-function buildReply({ intent, step, text, collectedData, lastBookingId, outbound }) {
-  return {
-    intent,
-    step,
-    text,
-    collectedData,
-    lastBookingId,
-    outbound
-  };
-}
-
-function normalizeCollectedData(value) {
-  return value && typeof value === 'object' ? value : {};
-}
-
-function looksLikeName(text) {
-  return /^[a-zA-ZáéíóúÁÉÍÓÚñÑ ]{3,}$/.test(text.trim());
-}
-
-function looksLikeFormalId(text) {
-  return /^[0-9kK.\-]{6,15}$/.test(text.trim());
-}
-
-function looksLikeDate(text) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(text.trim());
-}
-
-function looksLikeTime(text) {
-  return /^\d{2}:\d{2}$/.test(text.trim());
-}
-
-function normalizeDateInput(text) {
-  return String(text || '').trim().split(/\s+/)[0];
-}
-
-function normalizeTimeInput(text) {
-  return String(text || '').trim().slice(0, 5);
-}
-
-function parseSelectedAction(selectedId) {
-  if (!selectedId || !selectedId.includes(':')) {
-    return null;
-  }
-
-  const [type, ...rest] = selectedId.split(':');
-  return {
-    type,
-    value: rest.join(':')
-  };
-}
-
-async function resolveServiceSelection({ selectedAction, text, serviceCatalogService }) {
-  if (selectedAction?.type === 'service') {
-    return serviceCatalogService.getServiceById(selectedAction.value);
-  }
-
-  return serviceCatalogService.findServiceFromText(text);
-}
-
-function inferDeterministicIntent(text, matchedService, selectedAction) {
-  if (matchedService || selectedAction?.type === 'service' || selectedAction?.type === 'slot') {
-    return 'booking';
-  }
-
-  if (selectedAction?.type === 'faq') {
-    return 'faq';
-  }
-
-  if (selectedAction?.type === 'menu' && selectedAction.value === 'book') {
-    return 'booking';
-  }
-
-  if (/(reserv|agendar|agenda|hora|cita|turno)/.test(text)) {
-    return 'booking';
-  }
-
-  if (/(cancel|anular)/.test(text)) {
-    return 'cancel_booking';
-  }
-
-  if (/(reagend|reprogram|cambiar hora|mover)/.test(text)) {
-    return 'reschedule_booking';
-  }
-
-  if (asksForBusinessInfo(text)) {
-    return 'faq';
-  }
-
-  return null;
-}
-
-function asksForBusinessInfo(text) {
-  return /(horario|ubicacion|ubicación|direccion|dirección|donde|dónde|precio|precios|servicio|servicios|nombre|spa|instagram|telefono|teléfono|redes|estacionamiento|pago|tarjeta)/.test(text);
-}
-
-function wantsMainMenu(text) {
-  return /^(volver|menu|menú|inicio|principal|0|salir)$/.test(String(text || '').trim().toLowerCase());
 }
 
 async function sendReply(metaClient, whatsappNumber, reply) {
@@ -572,16 +796,137 @@ async function sendReply(metaClient, whatsappNumber, reply) {
   await metaClient.sendTextMessage(whatsappNumber, reply.text);
 }
 
-function normalizeSlotValue(startsAt) {
-  return dayjs(startsAt).format('HH:mm');
-}
-
 function buildUserFacingErrorMessage(error) {
   if (error instanceof AppError) {
     return error.message;
   }
 
-  return 'Ocurrio un problema procesando tu solicitud. ¿Quieres que lo intentemos de nuevo?';
+  return 'Ocurrio un problema procesando su solicitud. Quiere que lo intentemos de nuevo?';
 }
 
 module.exports = { createChatOrchestrator };
+
+function canStartBookingFromContext(currentStep) {
+  return ['idle', 'main_menu', 'consultation_open', 'answered'].includes(currentStep || 'idle');
+}
+
+function resolvePaymentProofRejectionReason(booking, validation) {
+  if (!validation.isValid) {
+    return validation.reason;
+  }
+
+  // Monto: solo rechazar si el comprobante no fue analizado y claramente llega en 0.
+  // El chequeo de monto insuficiente se maneja como underpayment en handlePaymentProofSubmission.
+
+  const expectedName = normalizePersonName(getExpectedPayerName(booking));
+  const detectedName = normalizePersonName(validation.payerName);
+  if (!expectedName || !detectedName || !personNameMatches(expectedName, detectedName)) {
+    return 'El nombre del comprobante no coincide con los datos personales entregados para la reserva.';
+  }
+
+  const expectedFormalId = normalizeFormalId(booking.payerFormalId || booking.client.formalId);
+  const detectedFormalId = normalizeFormalId(validation.payerFormalId);
+  if (detectedFormalId && expectedFormalId && expectedFormalId !== detectedFormalId) {
+    return 'El RUT o identificador del comprobante no coincide con el registrado en la reserva.';
+  }
+
+  const paymentTimestamp = parsePaymentTimestamp(validation.paymentTimestamp);
+  if (paymentTimestamp && paymentTimestamp.isValid()) {
+    // El timestamp ya viene en UTC gracias a parsePaymentTimestamp (asume -04:00 si falta offset).
+    const windowStartsAt = dayjs(booking.createdAt);
+    const windowEndsAt = booking.holdExpiresAt ? dayjs(booking.holdExpiresAt) : null;
+
+    if (paymentTimestamp.isBefore(windowStartsAt)) {
+      return `El pago del comprobante (${paymentTimestamp.utcOffset(-4 * 60).format('HH:mm')}) fue realizado antes de la creacion de esta reserva. No podemos aceptar comprobantes de pagos anteriores.`;
+    }
+
+    if (windowEndsAt && paymentTimestamp.isAfter(windowEndsAt)) {
+      return `El pago del comprobante (${paymentTimestamp.utcOffset(-4 * 60).format('HH:mm')}) fue realizado fuera de la ventana de pago (hasta las ${windowEndsAt.utcOffset(-4 * 60).format('HH:mm')}). Puede intentar con una reserva nueva.`;
+    }
+  }
+
+  return null;
+}
+
+function getExpectedPayerName(client) {
+  const normalized = normalizePersonName([
+    client?.payerName || client?.client?.name || client?.name,
+    client?.payerLastName || client?.client?.lastName || client?.lastName
+  ].filter(Boolean).join(' ').trim());
+  return dedupeNameTokens(normalized.split(' ').filter(Boolean)).join(' ');
+}
+
+function normalizePersonName(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function personNameMatches(expectedName, detectedName) {
+  const expectedTokens = dedupeNameTokens(expectedName.split(' ').filter(Boolean));
+  const detectedTokens = dedupeNameTokens(detectedName.split(' ').filter(Boolean));
+
+  if (!expectedTokens.length || !detectedTokens.length) {
+    return false;
+  }
+
+  const firstNameMatches = hasMatchingToken(expectedTokens[0], detectedTokens);
+  if (!firstNameMatches) {
+    return false;
+  }
+
+  const surnameTokens = expectedTokens.slice(1);
+  if (!surnameTokens.length) {
+    return true;
+  }
+
+  const matchedSurnameCount = surnameTokens.filter((token) => hasMatchingToken(token, detectedTokens)).length;
+  const requiredSurnameMatches = Math.min(Math.max(1, surnameTokens.length - 1), surnameTokens.length);
+
+  return matchedSurnameCount >= requiredSurnameMatches;
+}
+
+function normalizeFormalId(value) {
+  return String(value || '').toUpperCase().replace(/[^0-9K]/g, '');
+}
+
+function parsePaymentTimestamp(value) {
+  if (!value) {
+    return null;
+  }
+
+  // Si el string ya incluye offset de zona horaria (+HH:mm, -HH:mm o Z), parsearlo directamente.
+  // De lo contrario, asumir America/Santiago (UTC-4) para evitar falsos rechazos/aceptaciones
+  // cuando el AI omite el offset en comprobantes chilenos.
+  const str = String(value).trim().replace(' ', 'T');
+  const hasOffset = /([+-]\d{2}:?\d{2}|Z)$/.test(str);
+  const withOffset = hasOffset ? str : `${str}-04:00`;
+
+  const parsed = dayjs(withOffset);
+  return parsed.isValid() ? parsed : null;
+}
+
+function splitFullName(value) {
+  const cleaned = String(value || '').trim().replace(/\s+/g, ' ');
+  const parts = cleaned.split(' ').filter(Boolean);
+  if (parts.length < 2) {
+    return null;
+  }
+
+  return {
+    name: parts[0],
+    lastName: parts.slice(1).join(' ')
+  };
+}
+
+function dedupeNameTokens(tokens) {
+  return [...new Set(tokens)];
+}
+
+function hasMatchingToken(token, candidates) {
+  return candidates.some((candidate) => candidate === token || candidate.includes(token) || token.includes(candidate));
+}

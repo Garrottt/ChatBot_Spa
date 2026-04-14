@@ -17,7 +17,7 @@ const createBookingSchema = z.object({
 
 function createBookingRouter(dependencies) {
   const router = express.Router();
-  const { bookingService } = dependencies;
+  const { bookingService, reminderService } = dependencies;
 
   router.post('/quote', asyncHandler(async (req, res) => {
     const payload = quoteSchema.parse(req.body);
@@ -33,6 +33,16 @@ function createBookingRouter(dependencies) {
 
   router.post('/:id/cancel', asyncHandler(async (req, res) => {
     const result = await bookingService.cancelBooking(req.params.id);
+    res.json(result);
+  }));
+
+  router.post('/reminders/run', asyncHandler(async (_req, res) => {
+    const result = await reminderService.runPendingReminders();
+    res.json(result);
+  }));
+
+  router.post('/expire-pending', asyncHandler(async (_req, res) => {
+    const result = await bookingService.expirePendingBookings();
     res.json(result);
   }));
 

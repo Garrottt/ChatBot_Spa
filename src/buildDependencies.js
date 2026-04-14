@@ -10,6 +10,7 @@ const { createMessageService } = require('./services/messageService');
 const { createServiceCatalogService } = require('./services/serviceCatalogService');
 const { createBookingService } = require('./services/bookingService');
 const { createChatOrchestrator } = require('./services/chatOrchestrator');
+const { createReminderService } = require('./services/reminderService');
 
 async function buildDependencies(overrides = {}) {
   const prisma = overrides.prisma || new PrismaClient();
@@ -27,6 +28,12 @@ async function buildDependencies(overrides = {}) {
   });
   const openAIService = overrides.openAIService || createOpenAIService();
   const metaClient = overrides.metaClient || createMetaClient();
+  const reminderService = overrides.reminderService || createReminderService({
+    prisma,
+    metaClient,
+    messageService,
+    conversationService
+  });
   const chatOrchestrator = overrides.chatOrchestrator || createChatOrchestrator({
     openAIService,
     clientService,
@@ -49,6 +56,7 @@ async function buildDependencies(overrides = {}) {
     metaClient,
     paymentProvider,
     googleCalendar,
+    reminderService,
     chatOrchestrator
   };
 }

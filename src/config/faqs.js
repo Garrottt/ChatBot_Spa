@@ -13,12 +13,12 @@ const faqKnowledgeBase = [
   },
   {
     topic: 'ubicacion',
-    keywords: ['ubicacion', 'direccion', 'donde', 'dónde', 'estan', 'están', 'queda', 'encuentran'],
+    keywords: ['ubicacion', 'direccion', 'donde', 'd\u00F3nde', 'estan', 'est\u00E1n', 'queda', 'encuentran'],
     answer: `Nos encontramos en ${env.spaLocation}.`
   },
   {
     topic: 'contacto',
-    keywords: ['contacto', 'telefono', 'teléfono', 'fono', 'llamar', 'whatsapp'],
+    keywords: ['contacto', 'telefono', 'tel\u00E9fono', 'fono', 'llamar', 'whatsapp'],
     answer: `Puede contactarnos directamente en ${env.spaPhone}.`
   },
   {
@@ -28,27 +28,27 @@ const faqKnowledgeBase = [
   },
   {
     topic: 'politicas',
-    keywords: ['politicas', 'políticas', 'cancelacion', 'cancelación', 'reagendar', 'reprogramar'],
+    keywords: ['politicas', 'pol\u00EDticas', 'cancelacion', 'cancelaci\u00F3n', 'reagendar', 'reprogramar'],
     answer: env.spaPolicies
   },
   {
     topic: 'pagos',
-    keywords: ['pago', 'pagos', 'tarjeta', 'transferencia', 'efectivo', 'debito', 'débito', 'credito', 'crédito'],
+    keywords: ['pago', 'pagos', 'tarjeta', 'transferencia', 'efectivo', 'debito', 'd\u00E9bito', 'credito', 'cr\u00E9dito'],
     answer: `Nuestros medios de pago son: ${env.spaPaymentMethods}.`
   },
   {
     topic: 'estacionamiento',
-    keywords: ['estacionamiento', 'parking', 'auto', 'vehiculo', 'vehículo'],
+    keywords: ['estacionamiento', 'parking', 'auto', 'vehiculo', 'veh\u00EDculo'],
     answer: env.spaParkingInfo
   },
   {
     topic: 'preparacion',
-    keywords: ['traer', 'llevar', 'preparar', 'preparacion', 'preparación', 'antes del tratamiento'],
+    keywords: ['traer', 'llevar', 'preparar', 'preparacion', 'preparaci\u00F3n', 'antes del tratamiento'],
     answer: env.spaTreatmentPrep
   },
   {
     topic: 'edades',
-    keywords: ['edad', 'edades', 'menores', 'ninos', 'niños', 'adultos'],
+    keywords: ['edad', 'edades', 'menores', 'ninos', 'ni\u00F1os', 'adultos'],
     answer: env.spaAgePolicy
   },
   {

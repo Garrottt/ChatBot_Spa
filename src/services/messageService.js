@@ -12,7 +12,7 @@ function createMessageService({ prisma }) {
     });
   }
 
-  async function createIncomingMessage({ conversationId, clientId, content, providerId, metadata }) {
+  async function createIncomingMessage({ conversationId, clientId, content, providerId, metadata, messageType = 'text' }) {
     return prisma.message.create({
       data: {
         conversationId,
@@ -21,7 +21,7 @@ function createMessageService({ prisma }) {
         providerId,
         metadata,
         direction: 'incoming',
-        messageType: 'text'
+        messageType
       }
     });
   }

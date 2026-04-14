@@ -28,32 +28,42 @@ function createDependencies() {
         }
       ])
     },
+    reminderService: {
+      runPendingReminders: async () => ({
+        sent: 1
+      })
+    },
     bookingService: {
-      quoteAvailability: async () => ({
-        service: {
-          id: 'svc-1',
-          name: 'Masaje relajante',
-          durationMinutes: 60,
-          price: 35000,
-          currency: 'CLP'
-        },
-        slots: [
-          {
-            startsAt: '2026-04-15T10:00:00.000Z',
-            endsAt: '2026-04-15T11:00:00.000Z'
-          }
-        ]
-      }),
-      createBooking: async () => ({
-        id: 'booking-1'
-      }),
-      cancelBooking: async () => ({
-        id: 'booking-1',
-        status: 'CANCELLED'
-      }),
-      ensurePaymentLink: async () => ({
-        id: 'payment-1',
-        url: 'https://example.com/pay/booking-1'
+      ...{
+        quoteAvailability: async () => ({
+          service: {
+            id: 'svc-1',
+            name: 'Masaje relajante',
+            durationMinutes: 60,
+            price: 35000,
+            currency: 'CLP'
+          },
+          slots: [
+            {
+              startsAt: '2026-04-15T10:00:00.000Z',
+              endsAt: '2026-04-15T11:00:00.000Z'
+            }
+          ]
+        }),
+        createBooking: async () => ({
+          id: 'booking-1'
+        }),
+        cancelBooking: async () => ({
+          id: 'booking-1',
+          status: 'CANCELLED'
+        }),
+        ensurePaymentLink: async () => ({
+          id: 'payment-1',
+          url: 'https://example.com/pay/booking-1'
+        })
+      },
+      expirePendingBookings: async () => ({
+        expired: 2
       })
     }
   };
@@ -83,4 +93,24 @@ test('payment link route returns generated link', async () => {
 
   assert.equal(response.statusCode, 201);
   assert.match(response.body.url, /\/pay\//);
+});
+
+test('booking reminders route runs pending reminders', async () => {
+  const app = createApp(createDependencies());
+  const response = await request(app)
+    .post('/api/bookings/reminders/run')
+    .send({});
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.sent, 1);
+});
+
+test('expire pending route returns expired count', async () => {
+  const app = createApp(createDependencies());
+  const response = await request(app)
+    .post('/api/bookings/expire-pending')
+    .send({});
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.expired, 2);
 });
