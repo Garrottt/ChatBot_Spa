@@ -8,7 +8,7 @@ async function main() {
   const app = createApp(dependencies);
 
   logger.info('Build marker', {
-    buildMarker: 'interactive-sanitize-v2'
+    buildMarker: 'date-selection-v2'
   });
 
   app.listen(env.port, () => {
