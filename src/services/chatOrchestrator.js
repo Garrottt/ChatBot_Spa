@@ -218,13 +218,29 @@ function createChatOrchestrator({
       return welcomeFlow.buildMainMenuReply();
     }
 
-    // Seleccion de servicio (debe ir ANTES del check canStartBookingFromContext)
+    // Si el usuario ya esta en flujo de reserva y elige un servicio, debe continuar la reserva
+    // en lugar de volver al detalle informativo del servicio.
+    if ((matchedService || selectedAction?.type === 'service') && conversation.currentStep === 'awaiting_service') {
+      if (!matchedService) {
+        return buildReply({
+          intent: 'booking',
+          step: 'awaiting_service',
+          text: 'Elija uno de nuestros servicios para continuar con la reserva.',
+          collectedData,
+          outbound: await servicesFlow.createServiceListOutbound()
+        });
+      }
+
+      return bookingFlow.buildServiceSelectionReply(client, matchedService, collectedData);
+    }
+
+    // Seleccion de servicio para modo catalogo / consultas
     if (matchedService || selectedAction?.type === 'service') {
       if (!matchedService) {
         return buildReply({
           intent: 'booking',
           step: 'awaiting_service',
-          text: '✨ Elija uno de nuestros servicios para ver sus detalles.',
+          text: 'Elija uno de nuestros servicios para ver sus detalles.',
           collectedData,
           outbound: await servicesFlow.createServiceListOutbound()
         });
@@ -254,7 +270,7 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'faq',
         step: 'faq_context',
-        text: `💬 ¡Por supuesto! ¿Que desea saber sobre *${serviceName}*? Cuénteme su duda y con gusto le respondo.`,
+        text: `Por supuesto. Que desea saber sobre ${serviceName}? Cuenteme su duda y con gusto le respondo.`,
         collectedData: {
           ...collectedData,
           serviceId: selectedAction.value
@@ -278,7 +294,7 @@ function createChatOrchestrator({
             return buildReply({
               intent: 'booking',
               step: 'main_menu',
-              text: 'Su tiempo para confirmar la cita ya expiro y el horario fue liberado. Escriba *menu* para volver al menu principal y realizar una nueva reserva.',
+              text: 'Su tiempo para confirmar la cita ya expiro y el horario fue liberado. Escriba menu para volver al menu principal y realizar una nueva reserva.',
               collectedData: {}
             });
           }
@@ -286,7 +302,7 @@ function createChatOrchestrator({
           return buildReply({
             intent: 'booking',
             step: conversation.currentStep,
-            text: `Le quedan aproximadamente *${minutesLeft} ${minuteWord}* para enviar su comprobante y confirmar su cita.`,
+            text: `Le quedan aproximadamente ${minutesLeft} ${minuteWord} para enviar su comprobante y confirmar su cita.`,
             collectedData,
             lastBookingId: bookingId
           });
@@ -300,7 +316,7 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'booking',
         step: conversation.currentStep,
-        text: '⏳ Su reserva sigue activa. Cuando realize el pago, envie una *foto o captura del comprobante* aqui para confirmarlo.\n\nSi quiere saber cuanto tiempo le queda, escriba *"cuanto tiempo me queda"*.',
+        text: 'Su reserva sigue activa. Cuando realize el pago, envie una foto o captura del comprobante aqui para confirmarlo.\n\nSi quiere saber cuanto tiempo le queda, escriba "cuanto tiempo me queda".',
         collectedData,
         lastBookingId: conversation.lastBookingId || collectedData.bookingId || null
       });
@@ -494,7 +510,7 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'booking',
         step: 'awaiting_service',
-        text: '✨ Elija uno de nuestros servicios para ver sus detalles.',
+        text: 'Elija uno de nuestros servicios para continuar con la reserva.',
         collectedData,
         outbound: await servicesFlow.createServiceListOutbound()
       });
@@ -618,7 +634,7 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'booking',
         step: 'payment_proof_rejected_retry',
-        text: `⚠️ No pudimos validar su comprobante.\n\n*Motivo:* ${reason}\n\nSi tiene el comprobante a mano, puede reenviar una foto o captura mas clara. Su horario sigue reservado mientras el tiempo no expire. 📸`,
+        text: `No pude validar el comprobante: ${reason}\n\nPuede reenviar una foto o captura mas clara mientras el horario siga reservado.`,
         collectedData: {
           ...collectedData,
           bookingId
@@ -815,8 +831,13 @@ function resolvePaymentProofRejectionReason(booking, validation) {
     return validation.reason;
   }
 
-  // Monto: solo rechazar si el comprobante no fue analizado y claramente llega en 0.
-  // El chequeo de monto insuficiente se maneja como underpayment en handlePaymentProofSubmission.
+  if (typeof validation.detectedAmount !== 'number') {
+    return 'No se pudo leer con claridad el monto del comprobante.';
+  }
+
+  if (validation.detectedAmount !== booking.depositAmount) {
+    return `El monto del comprobante no coincide con el abono requerido. Esperado: ${booking.depositAmount}. Detectado: ${validation.detectedAmount}.`;
+  }
 
   const expectedName = normalizePersonName(getExpectedPayerName(booking));
   const detectedName = normalizePersonName(validation.payerName);
@@ -826,22 +847,30 @@ function resolvePaymentProofRejectionReason(booking, validation) {
 
   const expectedFormalId = normalizeFormalId(booking.payerFormalId || booking.client.formalId);
   const detectedFormalId = normalizeFormalId(validation.payerFormalId);
+  if (expectedFormalId && !detectedFormalId) {
+    return 'No se detecta RUT visible en el comprobante.';
+  }
+
   if (detectedFormalId && expectedFormalId && expectedFormalId !== detectedFormalId) {
     return 'El RUT o identificador del comprobante no coincide con el registrado en la reserva.';
   }
 
   const paymentTimestamp = parsePaymentTimestamp(validation.paymentTimestamp);
+  if (!paymentTimestamp || !paymentTimestamp.isValid()) {
+    return 'No se pudo validar la fecha y hora del pago del comprobante.';
+  }
+
   if (paymentTimestamp && paymentTimestamp.isValid()) {
     // El timestamp ya viene en UTC gracias a parsePaymentTimestamp (asume -04:00 si falta offset).
     const windowStartsAt = dayjs(booking.createdAt);
     const windowEndsAt = booking.holdExpiresAt ? dayjs(booking.holdExpiresAt) : null;
 
     if (paymentTimestamp.isBefore(windowStartsAt)) {
-      return `El pago del comprobante (${paymentTimestamp.utcOffset(-4 * 60).format('HH:mm')}) fue realizado antes de la creacion de esta reserva. No podemos aceptar comprobantes de pagos anteriores.`;
+      return `La hora del pago no coincide con la ventana valida de la reserva. El comprobante muestra ${paymentTimestamp.format('HH:mm')} y el pago fue realizado antes de crear la reserva.`;
     }
 
     if (windowEndsAt && paymentTimestamp.isAfter(windowEndsAt)) {
-      return `El pago del comprobante (${paymentTimestamp.utcOffset(-4 * 60).format('HH:mm')}) fue realizado fuera de la ventana de pago (hasta las ${windowEndsAt.utcOffset(-4 * 60).format('HH:mm')}). Puede intentar con una reserva nueva.`;
+      return `La hora del pago no coincide con la ventana valida de la reserva. El comprobante muestra ${paymentTimestamp.format('HH:mm')} y el limite era ${windowEndsAt.format('HH:mm')}.`;
     }
   }
 

@@ -16,7 +16,7 @@ function createDependencies(overrides = {}) {
       validatePaymentProof: async () => ({
         isValid: true,
         reason: 'ok',
-        detectedAmount: 10000,
+        detectedAmount: 100,
         payerName: 'Gonza Perez',
         payerFormalId: '210931468',
         paymentTimestamp: '2026-04-15T09:05:00-03:00',
@@ -48,13 +48,13 @@ function createDependencies(overrides = {}) {
       }),
       createPendingBooking: async () => ({
         id: 'booking-1',
-        depositAmount: 10000,
+        depositAmount: 100,
         service: { name: 'Masaje relajante', currency: 'CLP' }
       }),
       ensurePaymentLink: async () => ({ url: 'https://pay.test/booking-1' }),
       recordPaymentProofSubmission: async () => ({
         id: 'booking-1',
-        depositAmount: 10000,
+        depositAmount: 100,
         createdAt: '2026-04-15T12:00:00.000Z',
         holdExpiresAt: '2026-04-15T12:10:00.000Z',
         service: { name: 'Masaje relajante', currency: 'CLP' },
@@ -671,7 +671,7 @@ test('duplicate incoming provider ids are ignored and do not send another reply'
       validatePaymentProof: async () => ({
         isValid: true,
         reason: 'ok',
-        detectedAmount: 10000,
+        detectedAmount: 100,
         payerName: 'Gonza Perez',
         payerFormalId: '210931468',
         paymentTimestamp: '2026-04-15T09:05:00-03:00',
@@ -789,7 +789,7 @@ test('proof image is rejected when the payer name does not match the reservation
       validatePaymentProof: async () => ({
         isValid: true,
         reason: 'ok',
-        detectedAmount: 10000,
+        detectedAmount: 100,
         payerName: 'Otra Persona',
         payerFormalId: '210931468',
         paymentTimestamp: '2026-04-15T09:05:00-03:00',
@@ -831,7 +831,7 @@ test('proof image is rejected when payment time is outside the allowed hold wind
       validatePaymentProof: async () => ({
         isValid: true,
         reason: 'ok',
-        detectedAmount: 10000,
+        detectedAmount: 100,
         payerName: 'Gonza Perez',
         payerFormalId: '210931468',
         paymentTimestamp: '2026-04-15T09:25:00-03:00',
@@ -859,7 +859,7 @@ test('proof image is rejected when payment time is outside the allowed hold wind
   assert.match(sentMessages[0].text, /hora del pago no coincide/i);
 });
 
-test('proof image accepts duplicated stored first names when the receipt name is otherwise consistent', async () => {
+test('proof image is rejected when the receipt does not show the expected RUT even if the name is otherwise consistent', async () => {
   const { orchestrator, sentMessages } = createDependencies({
     client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza Gonza', lastName: 'Perez', formalId: '210931468' },
     conversation: {
@@ -872,7 +872,7 @@ test('proof image accepts duplicated stored first names when the receipt name is
     bookingService: {
       recordPaymentProofSubmission: async () => ({
         id: 'booking-1',
-        depositAmount: 10000,
+        depositAmount: 100,
         createdAt: '2026-04-15T12:00:00.000Z',
         holdExpiresAt: '2026-04-15T12:10:00.000Z',
         service: { name: 'Masaje relajante', currency: 'CLP' },
@@ -883,7 +883,7 @@ test('proof image accepts duplicated stored first names when the receipt name is
       validatePaymentProof: async () => ({
         isValid: true,
         reason: 'ok',
-        detectedAmount: 10000,
+        detectedAmount: 100,
         payerName: 'Gonza Benjamin Perez',
         payerFormalId: null,
         paymentTimestamp: '2026-04-15T09:05:00-03:00',
@@ -907,6 +907,6 @@ test('proof image accepts duplicated stored first names when the receipt name is
     }
   });
 
-  assert.equal(sentMessages[0].kind, 'buttons');
-  assert.match(sentMessages[0].bodyText, /quedo confirmada/i);
-});
+    assert.equal(sentMessages[0].kind, 'text');
+    assert.match(sentMessages[0].text, /No se detecta RUT visible/i);
+  });

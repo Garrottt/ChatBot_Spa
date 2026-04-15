@@ -30,7 +30,7 @@ function createPrismaStub(overrides = {}) {
         scheduledAt: new Date('2026-04-15T10:00:00.000Z'),
         endAt: new Date('2026-04-15T11:00:00.000Z'),
         holdExpiresAt: new Date('2026-04-15T09:10:00.000Z'),
-        depositAmount: 10000,
+        depositAmount: 100,
         createdAt: new Date('2026-04-15T09:00:00.000Z'),
         client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
         service: { id: 'svc-1', name: 'Masaje relajante', durationMinutes: 60, currency: 'CLP', calendarId: 'cal-1' },
@@ -83,7 +83,7 @@ test('ensurePaymentLink uses fixed deposit amount instead of service price', asy
 
   await bookingService.ensurePaymentLink('booking-1');
 
-  assert.equal(receivedAmount, 10000);
+  assert.equal(receivedAmount, 100);
 });
 
 test('confirmPendingBooking creates the Google Calendar event only after payment approval', async () => {
@@ -101,7 +101,7 @@ test('confirmPendingBooking creates the Google Calendar event only after payment
           scheduledAt: new Date('2026-04-15T10:00:00.000Z'),
           endAt: new Date('2026-04-15T11:00:00.000Z'),
           holdExpiresAt: new Date(Date.now() + 600000),
-          depositAmount: 10000,
+          depositAmount: 100,
           createdAt: new Date(),
           client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
           service: { id: 'svc-1', name: 'Masaje relajante', durationMinutes: 60, currency: 'CLP', calendarId: 'cal-1' },

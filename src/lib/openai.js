@@ -33,7 +33,7 @@ function localIntentClassifier(text) {
     return { intent: 'reschedule_booking', confidence: 0.88, entities: {} };
   }
 
-  if (/(horario|ubicacion|ubicaci\u00F3n|direccion|direcci\u00F3n|donde|d\u00F3nde|precio|precios|servicio|servicios|spa|nombre|beneficios|tratamientos)/.test(normalized)) {
+  if (/(horario|ubicacion|ubicación|direccion|dirección|donde|dónde|precio|precios|servicio|servicios|spa|nombre|beneficios|tratamientos)/.test(normalized)) {
     return { intent: 'faq', confidence: 0.82, entities: {} };
   }
 
@@ -183,6 +183,7 @@ Instrucciones:
         payerName: null,
         payerFormalId: null,
         paymentTimestamp: null,
+        transactionId: null,
         confidence: 0
       };
     }
@@ -195,6 +196,7 @@ Instrucciones:
         payerName: null,
         payerFormalId: null,
         paymentTimestamp: null,
+        transactionId: null,
         confidence: 0
       };
     }
@@ -205,7 +207,7 @@ Instrucciones:
         input: [
           {
             role: 'system',
-            content: 'Eres un extractor y validador de comprobantes de pago. Tu unica tarea es: (1) determinar si la imagen ES un comprobante de pago genuino, y (2) extraer los datos visibles. Responde SOLO JSON con forma {"isValid":boolean,"reason":"","detectedAmount":number|null,"payerName":string|null,"payerFormalId":string|null,"paymentTimestamp":string|null,"transactionId":string|null,"confidence":0}.'
+            content: 'Eres un extractor y validador estricto de comprobantes de pago. Responde SOLO JSON con forma {"isValid":boolean,"reason":"","detectedAmount":number|null,"payerName":string|null,"payerFormalId":string|null,"paymentTimestamp":string|null,"transactionId":string|null,"confidence":0}.'
           },
           {
             role: 'user',
@@ -215,21 +217,21 @@ Instrucciones:
                 text: `Analiza la imagen y responde siguiendo estas reglas estrictas:
 
 REGLA 1 - isValid:
-- isValid=true: la imagen parece un comprobante, voucher o captura de pantalla real de un pago o transferencia bancaria (de cualquier banco, billetera digital o procesador de pagos).
-- isValid=false: UNICAMENTE si la imagen claramente NO es un comprobante de pago (foto de otra cosa, imagen en blanco, captura de redes sociales, documento sin relacion con pagos, etc).
-- NO uses isValid=false porque el monto sea diferente al esperado, porque falte el RUT, o porque la hora este fuera del rango. Esas validaciones las realiza el sistema por separado.
+- isValid=true: solo si la imagen parece un comprobante o captura real de un pago y los datos visibles son compatibles con la reserva.
+- isValid=false: si la imagen no parece un comprobante real, si el monto no coincide, si el pagador no coincide, si el RUT esperado no coincide o no aparece cuando deberia aparecer, o si la fecha/hora visible cae fuera de la ventana esperada.
 
 REGLA 2 - Extraccion de datos:
 - payerName: nombre del pagador o titular que aparece en el comprobante. Si hay varios nombres, conserva el nombre completo tal como aparece.
-- payerFormalId: RUT o identificador SOLO si aparece visiblemente en la imagen. Muchos comprobantes bancarios chilenos NO incluyen el RUT; en ese caso devuelve null.
-- detectedAmount: monto numerico visible (sin simbolos). Puede no coincidir con el esperado; extraelo igual.
-- paymentTimestamp: fecha y hora en formato ISO 8601 CON offset de zona horaria. Para comprobantes chilenos con "Fecha" y "Hora" por separado, combinalas con el offset -04:00 (America/Santiago). Ejemplo: "2026-04-14T11:39:13-04:00". Si no puedes leer la fecha/hora, devuelve null.
-- transactionId: numero de solicitud, folio, numero de operacion, numero de transaccion, ID de operacion o cualquier identificador unico de la transaccion que aparezca en el comprobante (por ejemplo el campo "N° de Solicitud", "Folio", "N° Operacion", etc). Si no aparece ninguno, devuelve null.
+- payerFormalId: RUT o identificador si aparece visiblemente en la imagen. Si deberia estar y no aparece, devuelve null y explica el problema en reason.
+- detectedAmount: monto numerico visible (sin simbolos). Si no coincide con el esperado, extraelo igual y marca isValid=false.
+- paymentTimestamp: fecha y hora en formato ISO 8601 con offset de zona horaria. Para comprobantes chilenos con "Fecha" y "Hora" por separado, combinalas con el offset -04:00.
+- transactionId: numero de solicitud, folio, numero de operacion, numero de transaccion, ID de operacion o cualquier identificador unico visible. Si no aparece ninguno, devuelve null.
 - Si un campo no es legible, devuelve null para ese campo.
 
-Datos de referencia (solo para contexto, NO para determinar isValid):
+Datos de referencia para validar compatibilidad:
 - Pagador esperado: ${expectedPayerName || 'No disponible'}
 - RUT esperado: ${expectedFormalId || 'No disponible'}
+- Monto esperado: ${amount || 'No disponible'} ${currency}
 - Ventana de pago: desde ${paymentWindowStartsAt || 'No disponible'} hasta ${paymentWindowEndsAt || 'No disponible'}`
               },
               {
@@ -250,6 +252,7 @@ Datos de referencia (solo para contexto, NO para determinar isValid):
           payerName: null,
           payerFormalId: null,
           paymentTimestamp: null,
+          transactionId: null,
           confidence: 0
         };
       }

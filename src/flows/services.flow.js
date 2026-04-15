@@ -6,7 +6,7 @@ function createServicesFlow({ serviceCatalogService }) {
 
     return {
       kind: 'list',
-      bodyText: 'Estos son nuestros servicios disponibles. Seleccione uno para ver sus detalles.',
+      bodyText: 'Estos son nuestros servicios disponibles. Presiona uno para ver sus detalles.',
       buttonText: 'Ver servicios',
       sections: [
         {
@@ -38,7 +38,7 @@ function createServicesFlow({ serviceCatalogService }) {
       },
       outbound: {
         kind: 'buttons',
-        bodyText: `Que desea hacer con ${service.name}?`,
+        bodyText: `Que deseas hacer con ${service.name}?`,
         buttons: [
           { id: `bookservice:${service.id}`, title: 'Reservar' },
           { id: `askservice:${service.id}`, title: 'Consultas' }

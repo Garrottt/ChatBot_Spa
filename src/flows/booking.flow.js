@@ -79,9 +79,8 @@ function createBookingFlow({
     return buildReply({
       intent: 'booking',
       step: 'awaiting_date',
-      text: `Perfecto. Agendemos su cita de ${matchedService.name}. Que dia le viene mejor?`,
-      collectedData: nextCollectedData,
-      outbound: buildDateListOutbound()
+      text: `Perfecto. Agendemos su cita de ${matchedService.name}. Indique la fecha en formato YYYY-MM-DD.`,
+      collectedData: nextCollectedData
     });
   }
 
@@ -101,9 +100,8 @@ function createBookingFlow({
       return buildReply({
         intent: 'booking',
         step: 'awaiting_date',
-        text: 'La fecha seleccionada no es valida. Por favor elija una opcion directamente desde la lista.',
-        collectedData,
-        outbound: buildDateListOutbound()
+        text: 'Necesito la fecha en formato YYYY-MM-DD, por ejemplo 2026-04-15.',
+        collectedData
       });
     }
 
@@ -208,9 +206,8 @@ function createBookingFlow({
     return buildReply({
       intent: 'booking',
       step: 'awaiting_date',
-      text: 'Perfecto. Que dia prefiere para su cita?',
-      collectedData,
-      outbound: buildDateListOutbound()
+      text: 'Perfecto. Indique la fecha en formato YYYY-MM-DD.',
+      collectedData
     });
   }
 
@@ -240,7 +237,7 @@ function createBookingFlow({
 
   function buildPayerSummaryReply(client, collectedData) {
     const payerFullName = [client.name, client.lastName].filter(Boolean).join(' ').trim();
-    const summaryText = `Estos son los datos que tenemos registrados:\nNombre: ${payerFullName}\nRUT: ${client.formalId}\n\nSon estos los datos de quien realizara el abono?`;
+    const summaryText = `Tengo estos datos guardados sobre usted:\nNombre: ${payerFullName}\nRUT: ${client.formalId}\n\nConfirme si esos son los datos de quien realizara el abono.`;
 
     return buildReply({
       intent: 'booking',
@@ -254,19 +251,12 @@ function createBookingFlow({
         payerEmail: collectedData.payerEmail || null
       },
       outbound: {
-        kind: 'list',
+        kind: 'buttons',
         bodyText: summaryText,
-        buttonText: 'Opciones',
-        sections: [
-          {
-            title: 'Confirmar pagador',
-            rows: [
-              { id: 'payerconfirm:self', title: 'Esos son mis datos', description: 'Confirmar y continuar con el pago' },
-              { id: 'payeredit:self', title: 'Editar mis datos', description: 'Corregir nombre o RUT registrado' },
-              { id: 'payer:other', title: 'Otra persona pagara', description: 'Ingresar datos de otro pagador' },
-              { id: 'menu:main', title: 'Volver al menu', description: 'Regresar al menu principal' }
-            ]
-          }
+        buttons: [
+          { id: 'payerconfirm:self', title: 'Esos son mis datos' },
+          { id: 'payeredit:self', title: 'Editar mis datos' },
+          { id: 'payer:other', title: 'Otra persona' }
         ]
       }
     });
@@ -279,11 +269,17 @@ function createBookingFlow({
       text: `Para bloquear su horario necesitamos un abono de ${env.bookingDepositAmount} CLP. Como prefiere realizarlo?`,
       collectedData,
       outbound: {
-        kind: 'buttons',
+        kind: 'list',
         bodyText: `Abono requerido: ${env.bookingDepositAmount} CLP. Tiene ${env.bookingHoldMinutes} minutos para enviar el comprobante una vez realizado el pago.`,
-        buttons: [
-          { id: 'payment:card', title: 'Debito o credito' },
-          { id: 'payment:transfer', title: 'Transferencia' }
+        buttonText: 'Medio de pago',
+        sections: [
+          {
+            title: 'Opciones de pago',
+            rows: [
+              { id: 'payment:card', title: 'Debito o credito', description: 'Pagar con link de Mercado Pago' },
+              { id: 'payment:transfer', title: 'Transferencia', description: 'Recibir datos bancarios y enviar comprobante' }
+            ]
+          }
         ]
       }
     });
