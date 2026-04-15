@@ -7,6 +7,10 @@ async function main() {
   const dependencies = await buildDependencies();
   const app = createApp(dependencies);
 
+  logger.info('Build marker', {
+    buildMarker: 'interactive-sanitize-v2'
+  });
+
   app.listen(env.port, () => {
     logger.info(`Server listening on port ${env.port}`);
   });
@@ -36,4 +40,3 @@ main().catch((error) => {
   logger.error('Failed to start server', { error: error.message });
   process.exit(1);
 });
-

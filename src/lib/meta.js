@@ -53,13 +53,13 @@ function createMetaClient(overrides = {}) {
       type: 'interactive',
       interactive: {
         type: 'button',
-        body: { text: bodyText },
+        body: { text: sanitizeInteractiveBody(bodyText) },
         action: {
           buttons: buttons.slice(0, 3).map((button) => ({
             type: 'reply',
             reply: {
               id: button.id,
-              title: button.title
+              title: sanitizeButtonTitle(button.title)
             }
           }))
         }
@@ -72,15 +72,15 @@ function createMetaClient(overrides = {}) {
       type: 'interactive',
       interactive: {
         type: 'list',
-        body: { text: bodyText },
+        body: { text: sanitizeInteractiveBody(bodyText) },
         action: {
-          button: buttonText,
+          button: sanitizeButtonTitle(buttonText),
           sections: sections.map((section) => ({
-            title: section.title,
+            title: sanitizeSectionTitle(section.title),
             rows: section.rows.map((row) => ({
               id: row.id,
-              title: row.title,
-              description: row.description
+              title: sanitizeRowTitle(row.title),
+              description: sanitizeRowDescription(row.description)
             }))
           }))
         }
@@ -156,6 +156,8 @@ function createMetaClient(overrides = {}) {
       logger.error('Meta sendPayload failed', {
         to,
         payloadType: payload.type,
+        payload,
+        payloadJson: JSON.stringify(payload),
         status: error.response?.status || null,
         data: error.response?.data || null,
         message: error.message
@@ -231,3 +233,38 @@ function normalizeMessage(message, value) {
 }
 
 module.exports = { createMetaClient };
+
+function sanitizeInteractiveBody(value) {
+  return sanitizeText(value, 1024);
+}
+
+function sanitizeButtonTitle(value) {
+  return sanitizeText(value, 20);
+}
+
+function sanitizeSectionTitle(value) {
+  return sanitizeText(value, 24);
+}
+
+function sanitizeRowTitle(value) {
+  return sanitizeText(value, 24);
+}
+
+function sanitizeRowDescription(value) {
+  if (!value) {
+    return undefined;
+  }
+
+  return sanitizeText(value, 72);
+}
+
+function sanitizeText(value, maxLength) {
+  return String(value || '')
+    .normalize('NFKD')
+    .replace(/[\u{1F300}-\u{1FAFF}]/gu, '')
+    .replace(/\*/g, '')
+    .replace(/[_~`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength);
+}

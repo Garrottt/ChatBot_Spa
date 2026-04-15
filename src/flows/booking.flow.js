@@ -18,7 +18,7 @@ function buildDateListOutbound() {
   let cursor = dayjs();
 
   while (rows.length < 7) {
-    if (cursor.day() !== 0) { // Excluir domingos (0 = domingo)
+    if (cursor.day() !== 0) {
       const label = `${DAYS_ES[cursor.day()]} ${cursor.date()} ${MONTHS_ES[cursor.month()]}`;
       rows.push({
         id: `date:${cursor.format('YYYY-MM-DD')}`,
@@ -26,13 +26,14 @@ function buildDateListOutbound() {
         description: cursor.format('YYYY-MM-DD')
       });
     }
+
     cursor = cursor.add(1, 'day');
   }
 
   return {
     kind: 'list',
-    bodyText: '📅 Seleccione el dia de su preferencia para la cita.',
-    buttonText: 'Ver fechas disponibles',
+    bodyText: 'Seleccione el dia de su preferencia para la cita.',
+    buttonText: 'Ver fechas',
     sections: [{ title: 'Proximas fechas', rows }]
   };
 }
@@ -45,7 +46,7 @@ function createBookingFlow({
     return buildReply({
       intent: 'booking',
       step: 'awaiting_service',
-      text: '✨ ¡Con gusto! Seleccione el servicio que desea reservar.',
+      text: 'Con gusto. Seleccione el servicio que desea reservar.',
       collectedData,
       outbound: await servicesFlow.createServiceListOutbound()
     });
@@ -61,7 +62,7 @@ function createBookingFlow({
       return buildReply({
         intent: 'booking',
         step: 'awaiting_name',
-        text: `💆 ¡Excelente eleccion! Antes de buscar los horarios disponibles para *${matchedService.name}*, necesito su nombre y apellidos completos.`,
+        text: `Excelente eleccion. Antes de buscar horarios para ${matchedService.name}, necesito su nombre y apellidos completos.`,
         collectedData: nextCollectedData
       });
     }
@@ -70,7 +71,7 @@ function createBookingFlow({
       return buildReply({
         intent: 'booking',
         step: 'awaiting_formal_id',
-        text: `💆 ¡Excelente eleccion! Solo necesito su RUT o identificador para completar su perfil y ofrecerle los horarios disponibles.`,
+        text: 'Excelente. Solo necesito su RUT o identificador para completar su perfil y ofrecerle horarios disponibles.',
         collectedData: nextCollectedData
       });
     }
@@ -78,7 +79,7 @@ function createBookingFlow({
     return buildReply({
       intent: 'booking',
       step: 'awaiting_date',
-      text: `💆 ¡Perfecto! Agendemos su cita de *${matchedService.name}*. ¿Que dia le viene mejor?`,
+      text: `Perfecto. Agendemos su cita de ${matchedService.name}. Que dia le viene mejor?`,
       collectedData: nextCollectedData,
       outbound: buildDateListOutbound()
     });
@@ -89,7 +90,7 @@ function createBookingFlow({
       return buildReply({
         intent: 'booking',
         step: 'awaiting_service',
-        text: '😅 Perdi el contexto del servicio. Elija el servicio que desea reservar y comenzamos de nuevo.',
+        text: 'Perdi el contexto del servicio. Elija el servicio que desea reservar y comenzamos de nuevo.',
         collectedData,
         outbound: await servicesFlow.createServiceListOutbound()
       });
@@ -100,7 +101,7 @@ function createBookingFlow({
       return buildReply({
         intent: 'booking',
         step: 'awaiting_date',
-        text: '⚠️ La fecha seleccionada no es valida. Por favor elija una opcion directamente desde la lista.',
+        text: 'La fecha seleccionada no es valida. Por favor elija una opcion directamente desde la lista.',
         collectedData,
         outbound: buildDateListOutbound()
       });
@@ -121,7 +122,7 @@ function createBookingFlow({
       return buildReply({
         intent: 'booking',
         step: 'awaiting_date',
-        text: `😔 No hay horarios disponibles para *${quote.service.name}* en esa fecha. Elija otro dia y buscamos uno que le acomode.`,
+        text: `No hay horarios disponibles para ${quote.service.name} en esa fecha. Elija otro dia y buscamos uno que le acomode.`,
         collectedData: {
           ...collectedData,
           serviceId
@@ -133,7 +134,7 @@ function createBookingFlow({
     return buildReply({
       intent: 'booking',
       step: 'awaiting_time',
-      text: `🕐 Aqui estan los horarios disponibles para *${quote.service.name}*. Elija el que mas le acomode.`,
+      text: `Aqui estan los horarios disponibles para ${quote.service.name}. Elija el que mas le acomode.`,
       collectedData: {
         ...collectedData,
         date: normalizedDate,
@@ -161,7 +162,7 @@ function createBookingFlow({
       return buildReply({
         intent: 'booking',
         step: 'awaiting_service',
-        text: '😅 Se perdio el contexto de la reserva. Volvamos al inicio y elegimos el servicio.',
+        text: 'Se perdio el contexto de la reserva. Volvamos al inicio y elegimos el servicio.',
         collectedData: {},
         outbound: await servicesFlow.createServiceListOutbound()
       });
@@ -172,7 +173,7 @@ function createBookingFlow({
       return buildReply({
         intent: 'booking',
         step: 'awaiting_time',
-        text: '⚠️ No pude reconocer ese horario. Por favor elija una hora directamente desde la lista.',
+        text: 'No pude reconocer ese horario. Por favor elija una hora directamente desde la lista.',
         collectedData
       });
     }
@@ -186,7 +187,7 @@ function createBookingFlow({
       return buildReply({
         intent: 'booking',
         step: 'awaiting_name',
-        text: '📝 Antes de continuar con la reserva, necesito su nombre y apellidos completos.',
+        text: 'Antes de continuar con la reserva, necesito su nombre y apellidos completos.',
         collectedData: nextCollectedData
       });
     }
@@ -195,7 +196,7 @@ function createBookingFlow({
       return buildReply({
         intent: 'booking',
         step: 'awaiting_formal_id',
-        text: '📝 ¡Casi listo! Solo necesito su RUT o identificador para continuar.',
+        text: 'Casi listo. Solo necesito su RUT o identificador para continuar.',
         collectedData: nextCollectedData
       });
     }
@@ -207,7 +208,7 @@ function createBookingFlow({
     return buildReply({
       intent: 'booking',
       step: 'awaiting_date',
-      text: '📅 ¡Perfecto! ¿Que dia prefiere para su cita?',
+      text: 'Perfecto. Que dia prefiere para su cita?',
       collectedData,
       outbound: buildDateListOutbound()
     });
@@ -217,7 +218,7 @@ function createBookingFlow({
     return buildReply({
       intent: 'booking',
       step: 'awaiting_payer_role',
-      text: `💳 ¡Genial! Ya casi terminamos. Para reservar y bloquear su horario necesitamos un abono previo de *${env.bookingDepositAmount} CLP*.\n\n¿Quien realizara la transferencia del abono?`,
+      text: `Ya casi terminamos. Para reservar y bloquear su horario necesitamos un abono previo de ${env.bookingDepositAmount} CLP.\n\nQuien realizara el pago del abono?`,
       collectedData: {
         ...collectedData,
         payerName: collectedData.payerName || client.name || null,
@@ -227,7 +228,7 @@ function createBookingFlow({
       },
       outbound: {
         kind: 'buttons',
-        bodyText: `Necesitamos identificar al pagador del abono (${env.bookingDepositAmount} CLP) para validar correctamente el comprobante de transferencia.`,
+        bodyText: `Necesitamos identificar a la persona que realizara el pago del abono de ${env.bookingDepositAmount} CLP.`,
         buttons: [
           { id: 'payer:self', title: 'Yo hare el pago' },
           { id: 'payer:other', title: 'Otra persona' },
@@ -239,7 +240,8 @@ function createBookingFlow({
 
   function buildPayerSummaryReply(client, collectedData) {
     const payerFullName = [client.name, client.lastName].filter(Boolean).join(' ').trim();
-    const summaryText = `👤 Estos son los datos que tenemos registrados:\n\n*Nombre:* ${payerFullName}\n*RUT:* ${client.formalId}\n\n¿Son estos los datos de quien realizara el abono?`;
+    const summaryText = `Estos son los datos que tenemos registrados:\nNombre: ${payerFullName}\nRUT: ${client.formalId}\n\nSon estos los datos de quien realizara el abono?`;
+
     return buildReply({
       intent: 'booking',
       step: 'awaiting_payer_confirmation',
@@ -257,12 +259,12 @@ function createBookingFlow({
         buttonText: 'Opciones',
         sections: [
           {
-            title: 'Confirmar datos del pagador',
+            title: 'Confirmar pagador',
             rows: [
               { id: 'payerconfirm:self', title: 'Esos son mis datos', description: 'Confirmar y continuar con el pago' },
               { id: 'payeredit:self', title: 'Editar mis datos', description: 'Corregir nombre o RUT registrado' },
               { id: 'payer:other', title: 'Otra persona pagara', description: 'Ingresar datos de otro pagador' },
-              { id: 'menu:main', title: 'Volver al menu', description: '' }
+              { id: 'menu:main', title: 'Volver al menu', description: 'Regresar al menu principal' }
             ]
           }
         ]
@@ -274,11 +276,11 @@ function createBookingFlow({
     return buildReply({
       intent: 'booking',
       step: 'awaiting_payment_method',
-      text: `💳 Para bloquear su horario necesitamos un abono de *${env.bookingDepositAmount} CLP*. ¿Como prefiere realizarlo?`,
+      text: `Para bloquear su horario necesitamos un abono de ${env.bookingDepositAmount} CLP. Como prefiere realizarlo?`,
       collectedData,
       outbound: {
         kind: 'buttons',
-        bodyText: `Abono requerido: ${env.bookingDepositAmount} CLP\nTiene ${env.bookingHoldMinutes} minutos para enviar el comprobante una vez realizado el pago.`,
+        bodyText: `Abono requerido: ${env.bookingDepositAmount} CLP. Tiene ${env.bookingHoldMinutes} minutos para enviar el comprobante una vez realizado el pago.`,
         buttons: [
           { id: 'payment:card', title: 'Debito o credito' },
           { id: 'payment:transfer', title: 'Transferencia' }
@@ -294,7 +296,7 @@ function createBookingFlow({
       return buildReply({
         intent: 'booking',
         step: 'awaiting_service',
-        text: '😅 Se perdio el contexto de la reserva. Volvamos al inicio y elegimos el servicio.',
+        text: 'Se perdio el contexto de la reserva. Volvamos al inicio y elegimos el servicio.',
         collectedData: {},
         outbound: await servicesFlow.createServiceListOutbound()
       });
@@ -314,21 +316,21 @@ function createBookingFlow({
     });
 
     const paymentMethodText = paymentMethod === 'BANK_TRANSFER'
-      ? `🏦 Aqui estan los datos bancarios para realizar la transferencia del abono:\n\n${env.spaTransferDetails}`
-      : '💳 Aqui tiene el link para pagar el abono con debito o credito.';
+      ? `Aqui estan los datos bancarios para realizar la transferencia del abono:\n\n${env.spaTransferDetails}`
+      : 'Aqui tiene el link para pagar el abono con debito o credito.';
 
     const paymentLink = paymentMethod === 'BANK_TRANSFER'
       ? null
       : await bookingService.ensurePaymentLink(booking.id);
 
     const paymentInstructions = paymentLink
-      ? `🔗 *Link de pago:* ${paymentLink.url}`
-      : '📸 Una vez realizada la transferencia, envie una foto o captura del comprobante.';
+      ? `Link de pago: ${paymentLink.url}`
+      : 'Una vez realizada la transferencia, envie una foto o captura del comprobante.';
 
     return buildReply({
       intent: 'booking',
       step: 'awaiting_payment_proof',
-      text: `${paymentMethodText}\n\n💰 *Monto del abono:* ${env.bookingDepositAmount} CLP\n${paymentInstructions}\n\n⏱️ Tiene *${env.bookingHoldMinutes} minutos* para enviar el comprobante y confirmar su cita. ¡No se preocupe, le avisaremos cuando queden 5 minutos!`,
+      text: `${paymentMethodText}\n\nMonto del abono: ${env.bookingDepositAmount} CLP\n${paymentInstructions}\n\nTiene ${env.bookingHoldMinutes} minutos para enviar el comprobante y confirmar su cita.`,
       collectedData: {
         bookingId: booking.id,
         serviceId,
