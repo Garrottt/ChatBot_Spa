@@ -37,7 +37,7 @@ const envSchema = z.object({
   SPA_PARKING_INFO: z.string().default('Contamos con estacionamiento disponible para la comodidad de nuestros clientes.'),
   SPA_TREATMENT_PREP: z.string().default('Solo necesita venir con disposicion para relajarse. Nosotros nos encargamos del resto, incluyendo toallas, productos y ambiente preparado.'),
   SPA_AGE_POLICY: z.string().default('La mayoria de los tratamientos estan orientados a adultos. Para menores de edad, recomendamos consultar previamente.'),
-  BOOKING_DEPOSIT_AMOUNT: z.coerce.number().int().positive().default(10000),
+  BOOKING_DEPOSIT_AMOUNT: z.coerce.number().int().positive().default(100),
   BOOKING_HOLD_MINUTES: z.coerce.number().int().positive().default(10),
   BOOKING_REMINDER_HOURS: z.coerce.number().int().positive().default(24),
   BOOKING_REMINDER_INTERVAL_MINUTES: z.coerce.number().int().positive().default(5)

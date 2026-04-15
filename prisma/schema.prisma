@@ -106,7 +106,7 @@ model Booking {
   endAt               DateTime
   holdExpiresAt       DateTime?
   notes               String?
-  depositAmount       Int             @default(10000)
+  depositAmount       Int             @default(100)
   calendarEventId     String?
   reminderSentAt      DateTime?
   paymentProofReceivedAt DateTime?
