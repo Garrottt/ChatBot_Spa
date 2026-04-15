@@ -13,6 +13,9 @@ const { createServiceRouter } = require('./routes/services');
 
 function createApp(dependencies) {
   const app = express();
+  app.get("/ping", (req, res) => {
+    res.status(200).send("pong");
+  });
   app.set('trust proxy', 1);
   app.use(helmet());
   app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
