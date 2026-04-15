@@ -119,10 +119,15 @@ function createBookingFlow({
     }));
 
     if (!slotRows.length) {
+      const isToday = normalizedDate === dayjs().format('YYYY-MM-DD');
+      const noSlotsText = isToday
+        ? `Hoy ya no quedan horarios disponibles para ${quote.service.name}. Por favor seleccione otra fecha.`
+        : `No hay horarios disponibles para ${quote.service.name} en esa fecha. Elija otro dia y buscamos uno que le acomode.`;
+
       return buildReply({
         intent: 'booking',
         step: 'awaiting_date',
-        text: `No hay horarios disponibles para ${quote.service.name} en esa fecha. Elija otro dia y buscamos uno que le acomode.`,
+        text: noSlotsText,
         collectedData: {
           ...collectedData,
           serviceId
