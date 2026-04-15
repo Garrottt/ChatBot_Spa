@@ -415,8 +415,8 @@ test('service selection continues booking flow even when coming from consultatio
     media: null
   });
 
-  assert.equal(sentMessages[0].kind, 'text');
-  assert.match(sentMessages[0].text, /YYYY-MM-DD/);
+  assert.equal(sentMessages[0].kind, 'list');
+  assert.match(sentMessages[0].bodyText, /dia/i);
 });
 
 test('valid proof image confirms the booking after payment validation', async () => {
@@ -509,7 +509,7 @@ test('business info question is answered as faq even if model intent is poor', a
   assert.match(sentMessages[0].text, /FAQ:/);
 });
 
-test('invalid date while awaiting date asks for YYYY-MM-DD instead of crashing', async () => {
+test('invalid date while awaiting date asks the client to choose from the date list instead of crashing', async () => {
   const { orchestrator, sentMessages } = createDependencies({
     client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
     conversation: {
@@ -537,7 +537,8 @@ test('invalid date while awaiting date asks for YYYY-MM-DD instead of crashing',
     media: null
   });
 
-  assert.match(sentMessages[0].text, /YYYY-MM-DD/);
+  assert.equal(sentMessages[0].kind, 'list');
+  assert.match(sentMessages[0].bodyText, /dia/i);
 });
 
 test('main menu uses interactive list with spa options', async () => {

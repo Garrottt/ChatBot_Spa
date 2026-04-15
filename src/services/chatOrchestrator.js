@@ -532,19 +532,27 @@ function createChatOrchestrator({
       });
     }
 
-    if (conversation.currentStep === 'awaiting_date' || looksLikeDate(lowerText)) {
-      return bookingFlow.buildDateReply({
-        serviceId: collectedData.serviceId,
-        text,
-        collectedData
-      });
-    }
-
     if (conversation.currentStep === 'awaiting_time' || looksLikeTime(lowerText)) {
       return bookingFlow.confirmBookingTime({
         client,
         collectedData,
         selectedValue: text.trim()
+      });
+    }
+
+    if (selectedAction?.type === 'date') {
+      return bookingFlow.buildDateReply({
+        serviceId: collectedData.serviceId,
+        text: selectedAction.value,
+        collectedData
+      });
+    }
+
+    if (conversation.currentStep === 'awaiting_date' || looksLikeDate(lowerText)) {
+      return bookingFlow.buildDateReply({
+        serviceId: collectedData.serviceId,
+        text,
+        collectedData
       });
     }
 

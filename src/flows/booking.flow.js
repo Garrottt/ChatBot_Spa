@@ -79,8 +79,9 @@ function createBookingFlow({
     return buildReply({
       intent: 'booking',
       step: 'awaiting_date',
-      text: `Perfecto. Agendemos su cita de ${matchedService.name}. Indique la fecha en formato YYYY-MM-DD.`,
-      collectedData: nextCollectedData
+      text: `Perfecto. Agendemos su cita de ${matchedService.name}. Seleccione el dia que prefiera desde la lista.`,
+      collectedData: nextCollectedData,
+      outbound: buildDateListOutbound()
     });
   }
 
@@ -100,8 +101,9 @@ function createBookingFlow({
       return buildReply({
         intent: 'booking',
         step: 'awaiting_date',
-        text: 'Necesito la fecha en formato YYYY-MM-DD, por ejemplo 2026-04-15.',
-        collectedData
+        text: 'Seleccione el dia de su preferencia directamente desde la lista.',
+        collectedData,
+        outbound: buildDateListOutbound()
       });
     }
 
@@ -206,8 +208,9 @@ function createBookingFlow({
     return buildReply({
       intent: 'booking',
       step: 'awaiting_date',
-      text: 'Perfecto. Indique la fecha en formato YYYY-MM-DD.',
-      collectedData
+      text: 'Perfecto. Seleccione el dia de su preferencia desde la lista.',
+      collectedData,
+      outbound: buildDateListOutbound()
     });
   }
 
