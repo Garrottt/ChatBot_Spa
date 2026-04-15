@@ -30,8 +30,8 @@ function createGoogleCalendarClient() {
     }
 
     const calendar = getCalendar();
-    const startOfDay = dayjs(date).hour(9).minute(0).second(0).millisecond(0);
-    const endOfDay = dayjs(date).hour(20).minute(0).second(0).millisecond(0);
+    const startOfDay = buildChileDateTime(date, 9, 0);
+    const endOfDay = buildChileDateTime(date, 20, 0);
 
     let response;
 
@@ -136,7 +136,7 @@ function buildDevelopmentSlots(date, durationMinutes) {
   const slots = [];
 
   for (let index = 0; index < 5; index += 1) {
-    const start = dayjs(date).hour(startHour + index * 2).minute(0).second(0).millisecond(0);
+    const start = buildChileDateTime(date, startHour + index * 2, 0);
     slots.push({
       startsAt: start.toISOString(),
       endsAt: start.add(durationMinutes, 'minute').toISOString()
@@ -150,8 +150,8 @@ function buildAvailableSlotsFromEvents({ date, durationMinutes, events }) {
   const openingHour = 9;
   const closingHour = 20;
   const slots = [];
-  let cursor = dayjs(date).hour(openingHour).minute(0).second(0).millisecond(0);
-  const dayEnd = dayjs(date).hour(closingHour).minute(0).second(0).millisecond(0);
+  let cursor = buildChileDateTime(date, openingHour, 0);
+  const dayEnd = buildChileDateTime(date, closingHour, 0);
   const normalizedEvents = events
     .map((event) => ({
       start: dayjs(event.start?.dateTime || event.start?.date),
@@ -189,6 +189,12 @@ module.exports = {
   createGoogleCalendarClient,
   buildAvailableSlotsFromEvents
 };
+
+function buildChileDateTime(date, hour, minute) {
+  const hh = String(hour).padStart(2, '0');
+  const mm = String(minute).padStart(2, '0');
+  return dayjs(`${date}T${hh}:${mm}:00-04:00`);
+}
 
 function mapCalendarError(error, fallbackMessage) {
   const status = error.code || error.response?.status || 500;

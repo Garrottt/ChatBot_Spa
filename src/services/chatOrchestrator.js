@@ -827,7 +827,7 @@ function canStartBookingFromContext(currentStep) {
 }
 
 function resolvePaymentProofRejectionReason(booking, validation) {
-  if (!validation.isValid) {
+  if (!validation.isValid && !hasUsableProofExtraction(validation)) {
     return validation.reason;
   }
 
@@ -847,10 +847,6 @@ function resolvePaymentProofRejectionReason(booking, validation) {
 
   const expectedFormalId = normalizeFormalId(booking.payerFormalId || booking.client.formalId);
   const detectedFormalId = normalizeFormalId(validation.payerFormalId);
-  if (expectedFormalId && !detectedFormalId) {
-    return 'No se detecta RUT visible en el comprobante.';
-  }
-
   if (detectedFormalId && expectedFormalId && expectedFormalId !== detectedFormalId) {
     return 'El RUT o identificador del comprobante no coincide con el registrado en la reserva.';
   }
@@ -958,4 +954,13 @@ function dedupeNameTokens(tokens) {
 
 function hasMatchingToken(token, candidates) {
   return candidates.some((candidate) => candidate === token || candidate.includes(token) || token.includes(candidate));
+}
+
+function hasUsableProofExtraction(validation) {
+  return Boolean(
+    typeof validation?.detectedAmount === 'number' ||
+    validation?.payerName ||
+    validation?.paymentTimestamp ||
+    validation?.transactionId
+  );
 }

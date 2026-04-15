@@ -859,7 +859,7 @@ test('proof image is rejected when payment time is outside the allowed hold wind
   assert.match(sentMessages[0].text, /hora del pago no coincide/i);
 });
 
-test('proof image is rejected when the receipt does not show the expected RUT even if the name is otherwise consistent', async () => {
+test('proof image accepts receipts without visible RUT when amount, name and time are consistent', async () => {
   const { orchestrator, sentMessages } = createDependencies({
     client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza Gonza', lastName: 'Perez', formalId: '210931468' },
     conversation: {
@@ -907,6 +907,6 @@ test('proof image is rejected when the receipt does not show the expected RUT ev
     }
   });
 
-    assert.equal(sentMessages[0].kind, 'text');
-    assert.match(sentMessages[0].text, /No se detecta RUT visible/i);
+    assert.equal(sentMessages[0].kind, 'buttons');
+    assert.match(sentMessages[0].bodyText, /quedo confirmada/i);
   });
