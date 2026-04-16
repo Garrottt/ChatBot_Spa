@@ -7,6 +7,7 @@ const { createRateLimiter } = require('./middleware/rateLimiter');
 const { errorHandler } = require('./middleware/errorHandler');
 const { notFoundHandler } = require('./middleware/notFound');
 const { createWebhookRouter } = require('./routes/webhooks');
+const { createChatwootRouter } = require('./routes/chatwoot');
 const { createBookingRouter } = require('./routes/bookings');
 const { createPaymentRouter } = require('./routes/payments');
 const { createServiceRouter } = require('./routes/services');
@@ -31,6 +32,8 @@ function createApp(dependencies) {
   });
 
   app.use('/webhooks/meta', createWebhookRouter(dependencies));
+  app.use('/chatwoot/webhook', createChatwootRouter(dependencies));
+  app.use('/chatwoot/webhooks', createChatwootRouter(dependencies));
   app.use('/api/bookings', createBookingRouter(dependencies));
   app.use('/api/payments', createPaymentRouter(dependencies));
   app.use('/api/services', createServiceRouter(dependencies));

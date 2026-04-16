@@ -26,15 +26,29 @@ function createMessageService({ prisma }) {
     });
   }
 
-  async function createOutgoingMessage({ conversationId, clientId, content, metadata }) {
+  async function createOutgoingMessage({ conversationId, clientId, content, metadata, providerId = null, messageType = 'text' }) {
     return prisma.message.create({
       data: {
         conversationId,
         clientId,
         content,
+        providerId,
         metadata,
         direction: 'outgoing',
-        messageType: 'text'
+        messageType
+      }
+    });
+  }
+
+  async function findOutgoingByProviderId(providerId) {
+    if (!providerId) {
+      return null;
+    }
+
+    return prisma.message.findFirst({
+      where: {
+        providerId,
+        direction: 'outgoing'
       }
     });
   }
@@ -42,7 +56,8 @@ function createMessageService({ prisma }) {
   return {
     findIncomingByProviderId,
     createIncomingMessage,
-    createOutgoingMessage
+    createOutgoingMessage,
+    findOutgoingByProviderId
   };
 }
 

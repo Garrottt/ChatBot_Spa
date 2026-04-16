@@ -23,9 +23,46 @@ function createConversationService({ prisma }) {
     });
   }
 
+  async function mergeCollectedData(id, patch) {
+    const existing = await prisma.conversation.findUnique({
+      where: { id },
+      select: { collectedData: true }
+    });
+
+    return prisma.conversation.update({
+      where: { id },
+      data: {
+        collectedData: {
+          ...(existing?.collectedData || {}),
+          ...(patch || {})
+        }
+      }
+    });
+  }
+
+  async function findByChatwootConversationId(chatwootConversationId) {
+    if (!chatwootConversationId) {
+      return null;
+    }
+
+    return prisma.conversation.findFirst({
+      where: {
+        collectedData: {
+          path: ['chatwoot', 'conversationId'],
+          equals: chatwootConversationId
+        }
+      },
+      include: {
+        client: true
+      }
+    });
+  }
+
   return {
     getOrCreateActiveConversation,
-    updateConversation
+    updateConversation,
+    mergeCollectedData,
+    findByChatwootConversationId
   };
 }
 

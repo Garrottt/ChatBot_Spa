@@ -1,6 +1,7 @@
 const dayjs = require('dayjs');
 
 const { AppError } = require('../lib/errors');
+const { logger } = require('../lib/logger');
 const { createBookingFlow } = require('../flows/booking.flow');
 const { createFaqFlow } = require('../flows/faq.flow');
 const {
@@ -29,7 +30,8 @@ function createChatOrchestrator({
   messageService,
   bookingService,
   serviceCatalogService,
-  metaClient
+  metaClient,
+  chatwootService
 }) {
   const welcomeFlow = createWelcomeFlow();
   const servicesFlow = createServicesFlow({ serviceCatalogService });
@@ -70,6 +72,23 @@ function createChatOrchestrator({
       }
     });
 
+    if (chatwootService) {
+      try {
+        await chatwootService.captureIncomingMessage({
+          client,
+          conversation,
+          message
+        });
+      } catch (error) {
+        logger.error('Chatwoot sync failed for incoming message', {
+          conversationId: conversation.id,
+          clientId: client.id,
+          providerMessageId: message.providerMessageId,
+          error: error.message
+        });
+      }
+    }
+
     let reply;
 
     try {
@@ -103,7 +122,10 @@ function createChatOrchestrator({
     await conversationService.updateConversation(conversation.id, {
       currentIntent: reply.intent,
       currentStep: reply.step,
-      collectedData: reply.collectedData || conversation.collectedData || undefined,
+      collectedData: preserveSystemCollectedData(
+        conversation.collectedData,
+        reply.collectedData || conversation.collectedData || undefined
+      ),
       lastBookingId: reply.lastBookingId || conversation.lastBookingId || undefined
     });
 
@@ -963,4 +985,18 @@ function hasUsableProofExtraction(validation) {
     validation?.paymentTimestamp ||
     validation?.transactionId
   );
+}
+
+function preserveSystemCollectedData(existingData, nextData) {
+  const existing = existingData && typeof existingData === 'object' ? existingData : {};
+  const next = nextData && typeof nextData === 'object' ? nextData : {};
+
+  if (!existing.chatwoot) {
+    return nextData;
+  }
+
+  return {
+    ...next,
+    chatwoot: existing.chatwoot
+  };
 }

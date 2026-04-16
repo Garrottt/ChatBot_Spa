@@ -14,6 +14,14 @@ function createDependencies() {
       normalizeMessages: () => [],
       sendTextMessage: async () => ({ ok: true })
     },
+    chatwootClient: {
+      verifySignature: () => true
+    },
+    chatwootService: {
+      handleWebhookEvent: async () => ({
+        forwarded: true
+      })
+    },
     chatOrchestrator: {
       handleIncomingMessage: async () => ({ ok: true })
     },
@@ -113,4 +121,22 @@ test('expire pending route returns expired count', async () => {
 
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.expired, 2);
+});
+
+test('chatwoot webhook route accepts agent events', async () => {
+  const app = createApp(createDependencies());
+  const response = await request(app)
+    .post('/chatwoot/webhooks')
+    .send({
+      event: 'message_created',
+      message: {
+        id: 777,
+        message_type: 'outgoing',
+        private: false,
+        content: 'Hola'
+      }
+    });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.forwarded, true);
 });

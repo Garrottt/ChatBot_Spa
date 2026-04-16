@@ -2,6 +2,7 @@ const { PrismaClient } = require('@prisma/client');
 
 const { createOpenAIService } = require('./lib/openai');
 const { createMetaClient } = require('./lib/meta');
+const { createChatwootClient } = require('./lib/chatwoot');
 const { createGoogleCalendarClient } = require('./lib/googleCalendar');
 const { createPaymentProvider } = require('./lib/paymentProvider');
 const { createClientService } = require('./services/clientService');
@@ -10,6 +11,7 @@ const { createMessageService } = require('./services/messageService');
 const { createServiceCatalogService } = require('./services/serviceCatalogService');
 const { createBookingService } = require('./services/bookingService');
 const { createChatOrchestrator } = require('./services/chatOrchestrator');
+const { createChatwootService } = require('./services/chatwootService');
 const { createReminderService } = require('./services/reminderService');
 
 async function buildDependencies(overrides = {}) {
@@ -28,6 +30,13 @@ async function buildDependencies(overrides = {}) {
   });
   const openAIService = overrides.openAIService || createOpenAIService();
   const metaClient = overrides.metaClient || createMetaClient();
+  const chatwootClient = overrides.chatwootClient || createChatwootClient();
+  const chatwootService = overrides.chatwootService || createChatwootService({
+    chatwootClient,
+    conversationService,
+    messageService,
+    metaClient
+  });
   const reminderService = overrides.reminderService || createReminderService({
     prisma,
     metaClient,
@@ -42,7 +51,8 @@ async function buildDependencies(overrides = {}) {
     bookingService,
     serviceCatalogService,
     paymentProvider,
-    metaClient
+    metaClient,
+    chatwootService
   });
 
   return {
@@ -54,6 +64,8 @@ async function buildDependencies(overrides = {}) {
     bookingService,
     openAIService,
     metaClient,
+    chatwootClient,
+    chatwootService,
     paymentProvider,
     googleCalendar,
     reminderService,
