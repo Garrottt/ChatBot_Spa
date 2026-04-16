@@ -144,6 +144,43 @@ test('handleWebhookEvent accepts Chatwoot agent messages even when message_type 
   assert.equal(forwarded[0], 'Respuesta del agente');
 });
 
+test('handleWebhookEvent accepts flat Chatwoot payloads where content is at the top level', async () => {
+  const forwarded = [];
+  const service = createChatwootService({
+    chatwootClient: {
+      isConfigured: () => true
+    },
+    conversationService: {
+      findByChatwootConversationId: async () => ({
+        id: 'conv-1',
+        clientId: 'client-1',
+        client: { whatsappNumber: '56911111111' }
+      })
+    },
+    messageService: {
+      findOutgoingByProviderId: async () => null,
+      createOutgoingMessage: async () => ({})
+    },
+    metaClient: {
+      sendTextMessage: async (_to, text) => {
+        forwarded.push(text);
+      }
+    }
+  });
+
+  const result = await service.handleWebhookEvent({
+    event: 'message_created',
+    id: 779,
+    content: 'Mensaje plano del agente',
+    private: false,
+    sender: { type: 'user' },
+    conversation: { id: 99 }
+  });
+
+  assert.equal(result.forwarded, true);
+  assert.equal(forwarded[0], 'Mensaje plano del agente');
+});
+
 test('chatwoot client verifies webhook signature using timestamp and raw body', () => {
   process.env.CHATWOOT_WEBHOOK_SECRET = 'spa-test-secret';
   delete require.cache[require.resolve('../../src/config/env')];

@@ -43,7 +43,7 @@ function createChatwootService({
       return { ignored: true, reason: 'unsupported_event' };
     }
 
-    const message = payload.message || {};
+    const message = getWebhookMessage(payload);
     const isAgentMessage = isPublicAgentMessage(payload);
     if (!isAgentMessage) {
       logger.info('Chatwoot webhook ignored', {
@@ -74,7 +74,7 @@ function createChatwootService({
       return { ignored: true, reason: 'duplicate' };
     }
 
-    const chatwootConversationId = payload.conversation?.id || message.conversation_id;
+    const chatwootConversationId = payload.conversation?.id || message.conversation_id || payload.conversation_id;
     if (!chatwootConversationId) {
       logger.warn('Chatwoot webhook missing conversation id', { payload });
       return { ignored: true, reason: 'missing_conversation_id' };
@@ -189,7 +189,7 @@ function pickSourceId(contact) {
 }
 
 function isPublicAgentMessage(payload) {
-  const message = payload.message || {};
+  const message = getWebhookMessage(payload);
   if (message.private) {
     return false;
   }
@@ -198,10 +198,24 @@ function isPublicAgentMessage(payload) {
     return true;
   }
 
-  const senderType = String(message.sender?.type || payload.sender?.type || '').toLowerCase();
-  if (senderType === 'user') {
+  const senderType = String(
+    message.sender?.type ||
+    payload.sender?.type ||
+    message.sender_type ||
+    payload.sender_type ||
+    ''
+  ).toLowerCase();
+  if (senderType === 'user' || senderType === 'agent') {
     return true;
   }
 
   return false;
+}
+
+function getWebhookMessage(payload) {
+  if (payload.message && typeof payload.message === 'object') {
+    return payload.message;
+  }
+
+  return payload || {};
 }
