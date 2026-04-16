@@ -21,6 +21,7 @@ function createChatwootService({
     const linkage = await ensureConversationLink({ client, conversation });
     await chatwootClient.createMessage({
       conversationId: linkage.conversationId,
+      contactIdentifier: linkage.sourceId,
       content,
       messageType: 'incoming'
     });

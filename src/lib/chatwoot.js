@@ -12,6 +12,10 @@ function createChatwootClient(overrides = {}) {
   });
 
   function isConfigured() {
+    if (usesPublicInboxApi()) {
+      return Boolean(env.chatwootBaseUrl && env.chatwootInboxId);
+    }
+
     return Boolean(
       env.chatwootBaseUrl &&
       env.chatwootAccountId &&
@@ -41,19 +45,36 @@ function createChatwootClient(overrides = {}) {
     ensureConfigured();
 
     try {
-      const response = await httpClient.post(
-        `/api/v1/accounts/${env.chatwootAccountId}/contacts`,
-        {
-          inbox_id: Number(env.chatwootInboxId),
-          name,
-          phone_number: phoneNumber || undefined,
-          identifier: identifier || undefined,
-          email: email || undefined
-        },
-        {
-          headers: buildHeaders()
-        }
-      );
+      const response = usesPublicInboxApi()
+        ? await httpClient.post(
+          `/public/api/v1/inboxes/${env.chatwootInboxId}/contacts`,
+          {
+            name,
+            phone_number: phoneNumber || undefined,
+            identifier: identifier || undefined,
+            identifier_hash: buildIdentifierHash(identifier),
+            email: email || undefined,
+            custom_attributes: {}
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          }
+        )
+        : await httpClient.post(
+          `/api/v1/accounts/${env.chatwootAccountId}/contacts`,
+          {
+            inbox_id: Number(env.chatwootInboxId),
+            name,
+            phone_number: phoneNumber || undefined,
+            identifier: identifier || undefined,
+            email: email || undefined
+          },
+          {
+            headers: buildHeaders()
+          }
+        );
 
       return response.data;
     } catch (error) {
@@ -65,18 +86,30 @@ function createChatwootClient(overrides = {}) {
     ensureConfigured();
 
     try {
-      const response = await httpClient.post(
-        `/api/v1/accounts/${env.chatwootAccountId}/conversations`,
-        {
-          inbox_id: Number(env.chatwootInboxId),
-          source_id: sourceId,
-          contact_id: contactId,
-          custom_attributes: customAttributes || {}
-        },
-        {
-          headers: buildHeaders()
-        }
-      );
+      const response = usesPublicInboxApi()
+        ? await httpClient.post(
+          `/public/api/v1/inboxes/${env.chatwootInboxId}/contacts/${sourceId}/conversations`,
+          {
+            custom_attributes: customAttributes || {}
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          }
+        )
+        : await httpClient.post(
+          `/api/v1/accounts/${env.chatwootAccountId}/conversations`,
+          {
+            inbox_id: Number(env.chatwootInboxId),
+            source_id: sourceId,
+            contact_id: contactId,
+            custom_attributes: customAttributes || {}
+          },
+          {
+            headers: buildHeaders()
+          }
+        );
 
       return response.data;
     } catch (error) {
@@ -84,23 +117,36 @@ function createChatwootClient(overrides = {}) {
     }
   }
 
-  async function createMessage({ conversationId, content, messageType = 'incoming' }) {
+  async function createMessage({ conversationId, content, messageType = 'incoming', contactIdentifier }) {
     ensureConfigured();
 
     try {
-      const response = await httpClient.post(
-        `/api/v1/accounts/${env.chatwootAccountId}/conversations/${conversationId}/messages`,
-        {
-          content,
-          message_type: messageType,
-          private: false,
-          content_type: 'text',
-          content_attributes: {}
-        },
-        {
-          headers: buildHeaders()
-        }
-      );
+      const response = usesPublicInboxApi()
+        ? await httpClient.post(
+          `/public/api/v1/inboxes/${env.chatwootInboxId}/contacts/${contactIdentifier}/conversations/${conversationId}/messages`,
+          {
+            content,
+            echo_id: `${Date.now()}`
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          }
+        )
+        : await httpClient.post(
+          `/api/v1/accounts/${env.chatwootAccountId}/conversations/${conversationId}/messages`,
+          {
+            content,
+            message_type: messageType,
+            private: false,
+            content_type: 'text',
+            content_attributes: {}
+          },
+          {
+            headers: buildHeaders()
+          }
+        );
 
       return response.data;
     } catch (error) {
@@ -119,6 +165,10 @@ function createChatwootClient(overrides = {}) {
 
 module.exports = { createChatwootClient };
 
+function usesPublicInboxApi() {
+  return !/^\d+$/.test(String(env.chatwootInboxId || '').trim());
+}
+
 function buildHeaders() {
   return {
     api_access_token: env.chatwootApiAccessToken,
@@ -127,6 +177,13 @@ function buildHeaders() {
 }
 
 function ensureConfigured() {
+  if (usesPublicInboxApi()) {
+    if (!env.chatwootBaseUrl || !env.chatwootInboxId) {
+      throw new AppError('La integracion con Chatwoot no esta configurada completamente.', 500);
+    }
+    return;
+  }
+
   if (!env.chatwootBaseUrl || !env.chatwootAccountId || !env.chatwootInboxId || !env.chatwootApiAccessToken) {
     throw new AppError('La integracion con Chatwoot no esta configurada completamente.', 500);
   }
@@ -151,4 +208,15 @@ function safeEqual(left, right) {
   }
 
   return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function buildIdentifierHash(identifier) {
+  if (!identifier || !env.chatwootAccountId || /^\d+$/.test(String(env.chatwootAccountId || '').trim())) {
+    return undefined;
+  }
+
+  return crypto
+    .createHmac('sha256', env.chatwootAccountId)
+    .update(String(identifier))
+    .digest('hex');
 }
