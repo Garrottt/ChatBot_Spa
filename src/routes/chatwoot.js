@@ -2,6 +2,7 @@ const express = require('express');
 
 const { asyncHandler } = require('../lib/asyncHandler');
 const { AppError } = require('../lib/errors');
+const { logger } = require('../lib/logger');
 
 function createChatwootRouter(dependencies) {
   const router = express.Router();
@@ -17,6 +18,10 @@ function createChatwootRouter(dependencies) {
     }
 
     const result = await chatwootService.handleWebhookEvent(req.body);
+    logger.info('Processed Chatwoot webhook', {
+      event: req.body?.event || null,
+      result
+    });
     res.status(200).json({
       received: true,
       ...result

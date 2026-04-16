@@ -31,26 +31,44 @@ function createChatwootService({
 
   async function handleWebhookEvent(payload) {
     if (!chatwootClient?.isConfigured?.()) {
+      logger.warn('Chatwoot webhook ignored because integration is not configured');
       return { skipped: true, reason: 'not_configured' };
     }
 
     if (payload.event !== 'message_created') {
+      logger.info('Chatwoot webhook ignored', {
+        reason: 'unsupported_event',
+        event: payload.event || null
+      });
       return { ignored: true, reason: 'unsupported_event' };
     }
 
     const message = payload.message || {};
     if (message.message_type !== 'outgoing' || message.private) {
+      logger.info('Chatwoot webhook ignored', {
+        reason: 'not_public_outgoing',
+        messageType: message.message_type || null,
+        private: Boolean(message.private)
+      });
       return { ignored: true, reason: 'not_public_outgoing' };
     }
 
     const content = String(message.content || '').trim();
     if (!content) {
+      logger.info('Chatwoot webhook ignored', {
+        reason: 'empty_content',
+        chatwootMessageId: message.id || null
+      });
       return { ignored: true, reason: 'empty_content' };
     }
 
     const providerId = `chatwoot:${message.id}`;
     const existing = await messageService.findOutgoingByProviderId(providerId);
     if (existing) {
+      logger.info('Chatwoot webhook ignored', {
+        reason: 'duplicate',
+        providerId
+      });
       return { ignored: true, reason: 'duplicate' };
     }
 
@@ -67,6 +85,11 @@ function createChatwootService({
     }
 
     await metaClient.sendTextMessage(conversation.client.whatsappNumber, content);
+    logger.info('Forwarded Chatwoot reply to WhatsApp', {
+      chatwootConversationId,
+      whatsappNumber: conversation.client.whatsappNumber,
+      providerId
+    });
     await messageService.createOutgoingMessage({
       conversationId: conversation.id,
       clientId: conversation.clientId,
