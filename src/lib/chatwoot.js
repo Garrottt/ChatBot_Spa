@@ -24,18 +24,18 @@ function createChatwootClient(overrides = {}) {
     );
   }
 
-  function verifySignature(signatureHeader, rawBody) {
+  function verifySignature(signatureHeader, rawBody, timestampHeader) {
     if (!env.chatwootWebhookSecret) {
       return true;
     }
 
-    if (!signatureHeader || !rawBody) {
+    if (!signatureHeader || !rawBody || !timestampHeader) {
       return env.nodeEnv !== 'production';
     }
 
     const expected = crypto
       .createHmac('sha256', env.chatwootWebhookSecret)
-      .update(rawBody)
+      .update(`${timestampHeader}.${rawBody}`)
       .digest('hex');
 
     return safeEqual(signatureHeader, expected) || safeEqual(signatureHeader, `sha256=${expected}`);

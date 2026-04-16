@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('crypto');
 
+const { createChatwootClient } = require('../../src/lib/chatwoot');
 const { createChatwootService } = require('../../src/services/chatwootService');
 
 test('captureIncomingMessage creates contact, conversation and forwards inbound WhatsApp text to Chatwoot', async () => {
@@ -100,4 +102,18 @@ test('handleWebhookEvent forwards outgoing Chatwoot message to WhatsApp once', a
   assert.equal(forwarded[0].to, '56911111111');
   assert.equal(forwarded[0].text, 'Hola desde agente');
   assert.equal(saved[0].providerId, 'chatwoot:777');
+});
+
+test('chatwoot client verifies webhook signature using timestamp and raw body', () => {
+  process.env.CHATWOOT_WEBHOOK_SECRET = 'spa-test-secret';
+  delete require.cache[require.resolve('../../src/config/env')];
+  delete require.cache[require.resolve('../../src/lib/chatwoot')];
+
+  const { createChatwootClient: createFreshChatwootClient } = require('../../src/lib/chatwoot');
+  const client = createFreshChatwootClient();
+  const timestamp = '1713227400';
+  const rawBody = Buffer.from('{"event":"message_created","message":{"id":1}}');
+  const signature = `sha256=${crypto.createHmac('sha256', 'spa-test-secret').update(`${timestamp}.${rawBody}`).digest('hex')}`;
+
+  assert.equal(client.verifySignature(signature, rawBody, timestamp), true);
 });

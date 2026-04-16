@@ -9,7 +9,8 @@ function createChatwootRouter(dependencies) {
 
   router.post('/', asyncHandler(async (req, res) => {
     const signature = req.headers['x-chatwoot-signature'];
-    const verified = chatwootClient.verifySignature(signature, req.rawBody);
+    const timestamp = req.headers['x-chatwoot-timestamp'];
+    const verified = chatwootClient.verifySignature(signature, req.rawBody, timestamp);
 
     if (!verified) {
       throw new AppError('Invalid Chatwoot signature', 401);
