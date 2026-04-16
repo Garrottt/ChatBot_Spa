@@ -44,11 +44,13 @@ function createChatwootService({
     }
 
     const message = payload.message || {};
-    if (message.message_type !== 'outgoing' || message.private) {
+    const isAgentMessage = isPublicAgentMessage(payload);
+    if (!isAgentMessage) {
       logger.info('Chatwoot webhook ignored', {
         reason: 'not_public_outgoing',
         messageType: message.message_type || null,
-        private: Boolean(message.private)
+        private: Boolean(message.private),
+        senderType: message.sender?.type || payload.sender?.type || null
       });
       return { ignored: true, reason: 'not_public_outgoing' };
     }
@@ -184,4 +186,22 @@ function pickSourceId(contact) {
   const inboxId = Number.parseInt(env.chatwootInboxId || '', 10);
   const inbox = (contact.contact_inboxes || []).find((item) => Number(item.inbox?.id || item.inbox_id) === inboxId);
   return inbox?.source_id || contact.source_id;
+}
+
+function isPublicAgentMessage(payload) {
+  const message = payload.message || {};
+  if (message.private) {
+    return false;
+  }
+
+  if (message.message_type === 'outgoing') {
+    return true;
+  }
+
+  const senderType = String(message.sender?.type || payload.sender?.type || '').toLowerCase();
+  if (senderType === 'user') {
+    return true;
+  }
+
+  return false;
 }
