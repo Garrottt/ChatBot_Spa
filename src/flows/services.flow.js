@@ -6,7 +6,7 @@ function createServicesFlow({ serviceCatalogService }) {
 
     return {
       kind: 'list',
-      bodyText: 'Estos son nuestros servicios disponibles. Presiona uno para ver sus detalles.',
+      bodyText: '💆 Estos son nuestros servicios disponibles.\n\nSeleccione uno para ver su detalle, duracion y valor.',
       buttonText: 'Ver servicios',
       sections: [
         {
@@ -26,7 +26,7 @@ function createServicesFlow({ serviceCatalogService }) {
     const descriptionBlock = service.description
       ? `\n\n${service.description}`
       : '';
-    const detailText = `${service.name}${descriptionBlock}\n\nDuracion: ${service.durationMinutes} minutos\nPrecio: $${priceFormatted} ${service.currency}`;
+    const detailText = `✨ ${service.name}${descriptionBlock}\n\n⏱️ Duracion: ${service.durationMinutes} minutos\n💰 Precio: $${priceFormatted} ${service.currency}`;
 
     return buildReply({
       intent: 'services',
@@ -38,7 +38,7 @@ function createServicesFlow({ serviceCatalogService }) {
       },
       outbound: {
         kind: 'buttons',
-        bodyText: `Que deseas hacer con ${service.name}?`,
+        bodyText: `¿Que desea hacer con ${service.name}?`,
         buttons: [
           { id: `bookservice:${service.id}`, title: 'Reservar' },
           { id: `askservice:${service.id}`, title: 'Consultas' }
@@ -50,13 +50,13 @@ function createServicesFlow({ serviceCatalogService }) {
   async function buildServiceListReply(collectedData) {
     const services = await serviceCatalogService.listActiveServices();
     const summary = services
-      .map((service) => `${service.name}: ${service.description} (${service.durationMinutes} min, $${Number(service.price).toLocaleString('es-CL')} ${service.currency})`)
+      .map((service) => `✨ ${service.name}\n${service.description}\n⏱️ ${service.durationMinutes} min | 💰 $${Number(service.price).toLocaleString('es-CL')} ${service.currency}`)
       .join('\n\n');
 
     return buildReply({
       intent: 'services',
       step: 'services_list',
-      text: `Estos son nuestros servicios disponibles:\n\n${summary}`,
+      text: `💆 Estos son nuestros servicios disponibles:\n\n${summary}`,
       collectedData,
       outbound: await createServiceListOutbound()
     });

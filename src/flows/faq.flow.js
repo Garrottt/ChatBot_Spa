@@ -5,7 +5,7 @@ function createFaqFlow({ openAIService, serviceCatalogService }) {
     return buildReply({
       intent: 'faq',
       step: 'consultation_open',
-      text: 'Puede hacerme cualquier pregunta sobre el spa. Yo resolvere sus dudas con gusto.',
+      text: '💬 Puede hacerme cualquier pregunta sobre el spa.\n\nEstoy aqui para ayudarle con servicios, horarios, reservas, pagos y mas.',
       collectedData
     });
   }

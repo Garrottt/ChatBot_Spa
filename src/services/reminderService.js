@@ -34,7 +34,7 @@ function createReminderService({
     let sent = 0;
 
     for (const booking of bookings) {
-      const text = `Recordatorio de cita: tiene ${booking.service.name} agendado para el ${dayjs(booking.scheduledAt).format('YYYY-MM-DD HH:mm')}. Si necesita cancelar, puede responder a este chat.`;
+      const text = `📅 Recordatorio de cita\n\nTiene ${booking.service.name} agendado para el ${dayjs(booking.scheduledAt).format('YYYY-MM-DD HH:mm')}.\n\nSi necesita ayuda o desea cancelar, puede responder a este chat.`;
       await metaClient.sendTextMessage(booking.client.whatsappNumber, text);
 
       const conversation = await conversationService.getOrCreateActiveConversation(booking.clientId);
@@ -89,7 +89,7 @@ function createReminderService({
 
     for (const booking of bookings) {
       const expiresAt = dayjs(booking.holdExpiresAt).subtract(4, 'hour').format('HH:mm');
-      const text = `⏳ *Aviso importante:* le quedan aproximadamente *5 minutos* para enviar su comprobante de pago y confirmar su cita de *${booking.service.name}*.\n\nSi no recibimos el comprobante antes de las ${expiresAt}, el horario sera liberado automaticamente.`;
+      const text = `⏳ *Aviso importante*\n\nLe quedan aproximadamente *5 minutos* para enviar su comprobante de pago y confirmar su cita de *${booking.service.name}*.\n\nSi no recibimos el comprobante antes de las ${expiresAt}, el horario sera liberado automaticamente.`;
 
       try {
         await metaClient.sendTextMessage(booking.client.whatsappNumber, text);
@@ -140,7 +140,7 @@ function createReminderService({
         ? `\n\nDetectamos que habia realizado un abono parcial de *${partialAmountPaid} ${booking.service.currency}* para esta reserva. El equipo del spa se pondra en contacto con usted a la brevedad para solicitar sus datos bancarios y gestionar la devolucion de ese monto.`
         : '';
 
-      const text = `Lo sentimos, su tiempo para confirmar la cita de *${booking.service.name}* ha finalizado y el horario fue liberado.${partialNote}\n\nEscriba *menu* para volver al menu principal y realizar una nueva reserva cuando lo desee.`;
+      const text = `⌛ Su tiempo para confirmar la cita de *${booking.service.name}* ya finalizo y el horario fue liberado.${partialNote}\n\nCuando lo desee, escriba *menu* para volver al menu principal y realizar una nueva reserva.`;
 
       try {
         await metaClient.sendTextMessage(booking.client.whatsappNumber, text);
