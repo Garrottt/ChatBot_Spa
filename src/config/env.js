@@ -3,6 +3,16 @@ const { z } = require('zod');
 
 dotenv.config();
 
+const DEFAULT_SPA_TRANSFER_DETAILS = [
+  'Datos bancarios para transferir:',
+  'Titular: Gonzalo Benjamin Enrique Garrote Perez',
+  'RUT: 210931465',
+  'Banco: Mercado Pago',
+  'Tipo de cuenta: Cuenta Vista',
+  'Numero de cuenta: 1020190317',
+  'Correo: gonzalogarroteperez@gmail.com'
+].join('\n');
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.preprocess((v) => (v === '' || v == null) ? undefined : v, z.coerce.number().default(3000)),
@@ -38,7 +48,7 @@ const envSchema = z.object({
   SPA_FAQ_EXTRA: z.string().default('Ofrecemos tratamientos de bienestar y belleza con enfoque personalizado para cada cliente.'),
   SPA_INSTAGRAM: z.string().default('https://www.instagram.com/spa.ikigai.ovalle/'),
   SPA_PAYMENT_METHODS: z.string().default('Efectivo, transferencia y tarjetas de debito/credito'),
-  SPA_TRANSFER_DETAILS: z.string().default('Datos bancarios para transferir:\nCuenta RUT 21093146-5'),
+  SPA_TRANSFER_DETAILS: z.string().default(DEFAULT_SPA_TRANSFER_DETAILS),
   SPA_PARKING_INFO: z.string().default('Contamos con estacionamiento disponible para la comodidad de nuestros clientes.'),
   SPA_TREATMENT_PREP: z.string().default('Solo necesita venir con disposicion para relajarse. Nosotros nos encargamos del resto, incluyendo toallas, productos y ambiente preparado.'),
   SPA_AGE_POLICY: z.string().default('La mayoria de los tratamientos estan orientados a adultos. Para menores de edad, recomendamos consultar previamente.'),

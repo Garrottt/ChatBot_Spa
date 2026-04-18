@@ -320,7 +320,7 @@ function createBookingFlow({
     });
 
     const paymentMethodText = paymentMethod === 'BANK_TRANSFER'
-      ? `Aqui estan los datos bancarios para realizar la transferencia del abono:\n\n${env.spaTransferDetails}`
+      ? buildTransferPaymentText(env.spaTransferDetails)
       : 'Aqui tiene el link para pagar el abono con debito o credito.';
 
     const paymentLink = paymentMethod === 'BANK_TRANSFER'
@@ -360,3 +360,16 @@ function createBookingFlow({
 }
 
 module.exports = { createBookingFlow };
+
+function buildTransferPaymentText(transferDetails) {
+  const normalizedDetails = String(transferDetails || '').trim();
+  const sanitizedDetails = normalizedDetails
+    .replace(/^Datos bancarios para transferir:\s*/i, '')
+    .trim();
+
+  if (!sanitizedDetails) {
+    return 'Aqui estan los datos bancarios para realizar la transferencia del abono.';
+  }
+
+  return `Aqui estan los datos bancarios para realizar la transferencia del abono:\n\n${sanitizedDetails}`;
+}

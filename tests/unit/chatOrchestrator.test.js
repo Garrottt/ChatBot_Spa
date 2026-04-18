@@ -387,9 +387,10 @@ test('transfer payment selection sends bank details instead of a payment link', 
     media: null
   });
 
-  assert.match(sentMessages[0].text, /Datos bancarios para transferir/i);
+  assert.match(sentMessages[0].text, /Aqui estan los datos bancarios para realizar la transferencia del abono/i);
   assert.match(sentMessages[0].text, /Numero de cuenta: 1020190317/i);
   assert.match(sentMessages[0].text, /Mercado Pago/i);
+  assert.doesNotMatch(sentMessages[0].text, /Datos bancarios para transferir:[\s\S]*Datos bancarios para transferir:/i);
 });
 
 test('service selection continues booking flow even when coming from consultation context', async () => {
