@@ -217,3 +217,56 @@ test('reconcileCalendarEvents recreates cancelled Google Calendar events for con
   assert.equal(result.checked, 1);
   assert.equal(result.recreated, 1);
 });
+
+test('reconcileCalendarEvents recreates legacy dev events without querying Google Calendar', async () => {
+  let getEventCalls = 0;
+  let createdEvents = 0;
+
+  const bookingService = createBookingService({
+    prisma: createPrismaStub({
+      booking: {
+        findMany: async () => ([
+          {
+            id: 'booking-1',
+            clientId: 'client-1',
+            serviceId: 'svc-1',
+            status: 'CONFIRMED',
+            paymentStatus: 'APPROVED',
+            paymentProofStatus: 'VALID',
+            scheduledAt: new Date('2026-04-18T17:00:00.000Z'),
+            endAt: new Date('2026-04-18T18:00:00.000Z'),
+            calendarEventId: 'dev-event-booking-1',
+            client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
+            service: { id: 'svc-1', name: 'Masaje relajante', durationMinutes: 60, currency: 'CLP', calendarId: 'cal-1' },
+            paymentLink: null
+          }
+        ]),
+        update: async ({ where, data }) => ({
+          id: where.id,
+          calendarEventId: data.calendarEventId
+        })
+      }
+    }),
+    googleCalendar: {
+      getAvailableSlots: async () => [],
+      getEvent: async () => {
+        getEventCalls += 1;
+        return null;
+      },
+      createEvent: async () => {
+        createdEvents += 1;
+        return { id: 'real-event-id' };
+      },
+      cancelEvent: async () => ({ ok: true })
+    },
+    paymentProvider: {},
+    serviceCatalogService: {}
+  });
+
+  const result = await bookingService.reconcileCalendarEvents();
+
+  assert.equal(getEventCalls, 0);
+  assert.equal(createdEvents, 1);
+  assert.equal(result.checked, 1);
+  assert.equal(result.recreated, 1);
+});

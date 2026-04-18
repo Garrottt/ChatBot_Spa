@@ -34,6 +34,29 @@ npm run prisma:seed
 npm run dev
 ```
 
+## Deploy en produccion
+
+En produccion no uses `prisma migrate dev`. Ese comando intenta crear migraciones nuevas y usa locks interactivos que suelen fallar en plataformas como Render.
+
+Usa este flujo:
+
+```bash
+npm run prisma:generate
+npm run prisma:migrate:deploy
+npm start
+```
+
+Para Render:
+
+- Build Command: `npm install && npm run prisma:generate && npm run prisma:migrate:deploy`
+- Start Command: `npm start`
+
+Si aparece `P1002` con `pg_advisory_lock`, normalmente significa que:
+
+- se esta ejecutando `prisma migrate dev` en el deploy;
+- hay dos deploys o instancias intentando migrar al mismo tiempo;
+- o quedo una migracion anterior colgada y Neon/Render todavia mantiene el lock unos segundos.
+
 ## Variables de entorno
 
 Configura tus credenciales reales en `.env` tomando como base `.env.example`.

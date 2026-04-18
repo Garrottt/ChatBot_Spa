@@ -6,7 +6,8 @@ const { AppError } = require('./errors');
 const { logger } = require('./logger');
 
 function createGoogleCalendarClient() {
-  const hasCredentials = Boolean(env.googleClientEmail && env.googlePrivateKey);
+  const normalizedPrivateKey = normalizeGooglePrivateKey(env.googlePrivateKey);
+  const hasCredentials = Boolean(env.googleClientEmail && normalizedPrivateKey);
 
   function getCalendar() {
     if (!hasCredentials) {
@@ -15,7 +16,7 @@ function createGoogleCalendarClient() {
 
     const auth = new google.auth.JWT({
       email: env.googleClientEmail,
-      key: env.googlePrivateKey.replace(/\\n/g, '\n'),
+      key: normalizedPrivateKey,
       scopes: ['https://www.googleapis.com/auth/calendar']
     });
 
@@ -228,8 +229,26 @@ function buildAvailableSlotsFromEvents({ date, durationMinutes, events }) {
 
 module.exports = {
   createGoogleCalendarClient,
-  buildAvailableSlotsFromEvents
+  buildAvailableSlotsFromEvents,
+  normalizeGooglePrivateKey
 };
+
+function normalizeGooglePrivateKey(value) {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return '';
+  }
+
+  const withoutWrappingQuotes = raw
+    .replace(/^"/, '')
+    .replace(/"$/, '')
+    .trim();
+
+  return withoutWrappingQuotes
+    .replace(/\r\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .trim();
+}
 
 function buildChileDateTime(date, hour, minute) {
   const hh = String(hour).padStart(2, '0');

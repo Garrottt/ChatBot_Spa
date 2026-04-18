@@ -9,6 +9,7 @@
     "start": "node src/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:seed": "node prisma/seed.js",
     "test": "node --test --test-concurrency=1 --test-isolation=none tests/**/*.test.js",
     "test:watch": "node --test --test-concurrency=1 --test-isolation=none --watch tests/**/*.test.js"

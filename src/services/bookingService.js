@@ -503,12 +503,16 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
       let shouldCreateEvent = !booking.calendarEventId;
 
       if (booking.calendarEventId) {
-        const existingEvent = await googleCalendar.getEvent({
-          calendarId: booking.service.calendarId,
-          eventId: booking.calendarEventId
-        });
+        if (booking.calendarEventId.startsWith('dev-event-')) {
+          shouldCreateEvent = true;
+        } else {
+          const existingEvent = await googleCalendar.getEvent({
+            calendarId: booking.service.calendarId,
+            eventId: booking.calendarEventId
+          });
 
-        shouldCreateEvent = !existingEvent || existingEvent.status === 'cancelled';
+          shouldCreateEvent = !existingEvent || existingEvent.status === 'cancelled';
+        }
       }
 
       if (!shouldCreateEvent) {
