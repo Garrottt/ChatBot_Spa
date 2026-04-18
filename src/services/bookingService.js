@@ -2,6 +2,7 @@ const dayjs = require('dayjs');
 
 const { env } = require('../config/env');
 const { AppError } = require('../lib/errors');
+const { logger } = require('../lib/logger');
 
 function createBookingService({ prisma, googleCalendar, paymentProvider, serviceCatalogService }) {
   async function quoteAvailability({ serviceId, date }) {
@@ -311,6 +312,12 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
     }
 
     if (booking.status === 'CONFIRMED' && booking.calendarEventId) {
+      logger.info('Cancelling Google Calendar event for booking', {
+        bookingId: booking.id,
+        calendarEventId: booking.calendarEventId,
+        calendarId: booking.service.calendarId || env.googleDefaultCalendarId
+      });
+
       await googleCalendar.cancelEvent({
         calendarId: booking.service.calendarId,
         eventId: booking.calendarEventId
@@ -464,6 +471,73 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
     });
   }
 
+  async function reconcileCalendarEvents({ referenceDate = new Date(), limit = 50 } = {}) {
+    const bookings = await prisma.booking.findMany({
+      where: {
+        status: 'CONFIRMED',
+        scheduledAt: { gte: new Date(referenceDate) }
+      },
+      include: {
+        client: true,
+        service: true,
+        paymentLink: true
+      },
+      orderBy: { scheduledAt: 'asc' },
+      take: limit
+    });
+
+    let checked = 0;
+    let recreated = 0;
+
+    for (const booking of bookings) {
+      checked += 1;
+
+      let shouldCreateEvent = !booking.calendarEventId;
+
+      if (booking.calendarEventId) {
+        const existingEvent = await googleCalendar.getEvent({
+          calendarId: booking.service.calendarId,
+          eventId: booking.calendarEventId
+        });
+
+        shouldCreateEvent = !existingEvent || existingEvent.status === 'cancelled';
+      }
+
+      if (!shouldCreateEvent) {
+        continue;
+      }
+
+      const event = await googleCalendar.createEvent({
+        calendarId: booking.service.calendarId,
+        booking,
+        client: booking.client,
+        service: booking.service
+      });
+
+      await prisma.booking.update({
+        where: { id: booking.id },
+        data: {
+          calendarEventId: event.id
+        }
+      });
+
+      recreated += 1;
+
+      logger.warn('Recreated Google Calendar event for confirmed booking', {
+        bookingId: booking.id,
+        previousCalendarEventId: booking.calendarEventId,
+        newCalendarEventId: event.id,
+        scheduledAt: booking.scheduledAt.toISOString(),
+        calendarId: booking.service.calendarId || env.googleDefaultCalendarId
+      });
+    }
+
+    return {
+      checked,
+      recreated
+    };
+  }
+
   return {
     quoteAvailability,
     createBooking,
@@ -475,7 +549,8 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
     cancelBooking,
     expirePendingBookings,
     findUpcomingBookingsForClient,
-    ensurePaymentLink
+    ensurePaymentLink,
+    reconcileCalendarEvents
   };
 }
 

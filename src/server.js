@@ -15,6 +15,13 @@ async function main() {
     logger.info(`Server listening on port ${env.port}`);
   });
 
+  try {
+    const result = await dependencies.bookingService.reconcileCalendarEvents();
+    logger.info('Startup Google Calendar reconciliation finished', result);
+  } catch (error) {
+    logger.error('Startup Google Calendar reconciliation failed', { error: error.message });
+  }
+
   // Alertas de ventana de pago: aviso de 5 min y notificacion de expiración.
   // Se ejecutan cada 60 segundos para respetar la ventana de 10 minutos.
   setInterval(async () => {
@@ -34,6 +41,15 @@ async function main() {
       logger.error('Reminder interval error', { error: error.message });
     }
   }, env.bookingReminderIntervalMinutes * 60 * 1000);
+
+  setInterval(async () => {
+    try {
+      const result = await dependencies.bookingService.reconcileCalendarEvents();
+      logger.info('Scheduled Google Calendar reconciliation finished', result);
+    } catch (error) {
+      logger.error('Scheduled Google Calendar reconciliation failed', { error: error.message });
+    }
+  }, 5 * 60 * 1000);
 }
 
 main().catch((error) => {

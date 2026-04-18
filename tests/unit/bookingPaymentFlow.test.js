@@ -156,3 +156,64 @@ test('expirePendingBookings marks overdue temporary bookings as expired', async 
 
   assert.equal(result.expired, 2);
 });
+
+test('reconcileCalendarEvents recreates cancelled Google Calendar events for confirmed bookings', async () => {
+  let receivedLookup = null;
+  let createdEvents = 0;
+  let updatedBookingId = null;
+  let updatedCalendarEventId = null;
+
+  const bookingService = createBookingService({
+    prisma: createPrismaStub({
+      booking: {
+        findMany: async () => ([
+          {
+            id: 'booking-1',
+            clientId: 'client-1',
+            serviceId: 'svc-1',
+            status: 'CONFIRMED',
+            paymentStatus: 'APPROVED',
+            paymentProofStatus: 'VALID',
+            scheduledAt: new Date('2026-04-18T17:00:00.000Z'),
+            endAt: new Date('2026-04-18T18:00:00.000Z'),
+            calendarEventId: 'old-event-id',
+            client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
+            service: { id: 'svc-1', name: 'Masaje relajante', durationMinutes: 60, currency: 'CLP', calendarId: 'cal-1' },
+            paymentLink: null
+          }
+        ]),
+        update: async ({ where, data }) => {
+          updatedBookingId = where.id;
+          updatedCalendarEventId = data.calendarEventId;
+          return {
+            id: where.id,
+            calendarEventId: data.calendarEventId
+          };
+        }
+      }
+    }),
+    googleCalendar: {
+      getAvailableSlots: async () => [],
+      getEvent: async ({ eventId }) => {
+        receivedLookup = eventId;
+        return { id: eventId, status: 'cancelled' };
+      },
+      createEvent: async () => {
+        createdEvents += 1;
+        return { id: 'new-event-id' };
+      },
+      cancelEvent: async () => ({ ok: true })
+    },
+    paymentProvider: {},
+    serviceCatalogService: {}
+  });
+
+  const result = await bookingService.reconcileCalendarEvents();
+
+  assert.equal(receivedLookup, 'old-event-id');
+  assert.equal(createdEvents, 1);
+  assert.equal(updatedBookingId, 'booking-1');
+  assert.equal(updatedCalendarEventId, 'new-event-id');
+  assert.equal(result.checked, 1);
+  assert.equal(result.recreated, 1);
+});

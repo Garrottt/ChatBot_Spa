@@ -99,6 +99,46 @@ function createGoogleCalendarClient() {
     return response.data;
   }
 
+  async function getEvent({ calendarId, eventId }) {
+    const selectedCalendarId = calendarId || env.googleDefaultCalendarId;
+
+    if (!eventId) {
+      return null;
+    }
+
+    if (!hasCredentials) {
+      return eventId.startsWith('dev-event-')
+        ? { id: eventId, status: 'confirmed' }
+        : null;
+    }
+
+    const calendar = getCalendar();
+
+    try {
+      const response = await calendar.events.get({
+        calendarId: selectedCalendarId,
+        eventId
+      });
+
+      return response.data;
+    } catch (error) {
+      const status = error.code || error.response?.status || null;
+
+      if (status === 404) {
+        return null;
+      }
+
+      logger.error('Google Calendar event lookup failed', {
+        calendarId: selectedCalendarId,
+        eventId,
+        error: error.message,
+        status
+      });
+
+      throw mapCalendarError(error, 'No pude revisar la reserva en Google Calendar.');
+    }
+  }
+
   async function cancelEvent({ calendarId, eventId }) {
     if (!eventId || !hasCredentials) {
       return { skipped: true };
@@ -127,6 +167,7 @@ function createGoogleCalendarClient() {
   return {
     getAvailableSlots,
     createEvent,
+    getEvent,
     cancelEvent
   };
 }
