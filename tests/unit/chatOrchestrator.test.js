@@ -735,7 +735,7 @@ test('duplicate incoming provider ids are ignored and do not send another reply'
   assert.equal(sentMessages.length, 0);
 });
 
-test('manage reservations flow lets the user choose a booking to cancel', async () => {
+test('manage reservations flow opens a safe management menu instead of cancelling directly', async () => {
   const { orchestrator, sentMessages } = createDependencies({
     client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
     conversation: {
@@ -772,9 +772,53 @@ test('manage reservations flow lets the user choose a booking to cancel', async 
     media: null
   });
 
-  assert.equal(sentMessages[0].kind, 'list');
-  assert.equal(sentMessages[0].sections[0].rows.length, 2);
-  assert.match(sentMessages[0].bodyText, /cita que desea cancelar/i);
+  assert.equal(sentMessages[0].kind, 'buttons');
+  assert.match(sentMessages[0].bodyText, /2 reservas activas/i);
+  assert.equal(sentMessages[0].buttons[0].id, 'manage:view');
+  assert.equal(sentMessages[0].buttons[1].id, 'manage:cancel');
+});
+
+test('view reservations shows upcoming bookings without entering cancellation flow', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'manage_bookings',
+      currentStep: 'manage_bookings_menu',
+      collectedData: null,
+      lastBookingId: null
+    },
+    bookingService: {
+      findUpcomingBookingsForClient: async () => ([
+        {
+          id: 'booking-1',
+          scheduledAt: '2026-04-15T10:00:00.000Z',
+          service: { name: 'Masaje relajante' }
+        },
+        {
+          id: 'booking-2',
+          scheduledAt: '2026-04-16T12:00:00.000Z',
+          service: { name: 'Limpieza facial profunda' }
+        }
+      ])
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-manage-view',
+    from: '56911111111',
+    type: 'interactive',
+    text: 'Ver reservas',
+    selectedId: 'manage:view',
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    media: null
+  });
+
+  assert.equal(sentMessages[0].kind, 'buttons');
+  assert.match(sentMessages[0].bodyText, /Estas son sus proximas reservas/i);
+  assert.match(sentMessages[0].bodyText, /Masaje relajante/i);
+  assert.match(sentMessages[0].bodyText, /Limpieza facial profunda/i);
 });
 
 test('proof image is rejected when the payer name does not match the reservation data', async () => {

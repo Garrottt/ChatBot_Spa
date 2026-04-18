@@ -169,6 +169,14 @@ function createChatOrchestrator({
     }
 
     if (selectedAction?.type === 'menu' && selectedAction.value === 'manage') {
+      return handleManageBookingsMenu(client.id);
+    }
+
+    if (selectedAction?.type === 'manage' && selectedAction.value === 'view') {
+      return handleViewBookingsIntent(client.id);
+    }
+
+    if (selectedAction?.type === 'manage' && selectedAction.value === 'cancel') {
       return handleCancelBookingIntent(client.id);
     }
 
@@ -203,7 +211,7 @@ function createChatOrchestrator({
           kind: 'buttons',
           bodyText: `Confirmar cancelacion de ${selectedBooking.service.name} el ${dayjs(selectedBooking.scheduledAt).format('YYYY-MM-DD HH:mm')}`,
           buttons: [
-            { id: `cancelconfirm:${selectedBooking.id}`, title: 'Confirmar' },
+            { id: `cancelconfirm:${selectedBooking.id}`, title: 'Si, cancelar' },
             { id: 'menu:main', title: 'Volver' }
           ]
         }
@@ -745,8 +753,86 @@ function createChatOrchestrator({
         bodyText: `${craftedMessage}\n\nDesea realizar otra gestion?`,
         buttons: [
           { id: 'menu:book', title: 'Nueva reserva' },
-          { id: 'menu:manage', title: 'Mis reservas' },
+          { id: 'menu:manage', title: 'Ver reservas' },
           { id: 'menu:main', title: 'Menu' }
+        ]
+      }
+    });
+  }
+
+  async function handleManageBookingsMenu(clientId) {
+    const upcomingBookings = await bookingService.findUpcomingBookingsForClient(clientId, { limit: 10 });
+
+    if (!upcomingBookings.length) {
+      return buildReply({
+        intent: 'manage_bookings',
+        step: 'manage_bookings_empty',
+        text: 'No encuentro reservas proximas activas en este momento.',
+        collectedData: {},
+        outbound: {
+          kind: 'buttons',
+          bodyText: 'No hay reservas activas para gestionar.',
+          buttons: [
+            { id: 'menu:book', title: 'Reservar cita' },
+            { id: 'menu:main', title: 'Volver' }
+          ]
+        }
+      });
+    }
+
+    return buildReply({
+      intent: 'manage_bookings',
+      step: 'manage_bookings_menu',
+      text: 'Que desea hacer con sus reservas activas?',
+      collectedData: {},
+      outbound: {
+        kind: 'buttons',
+        bodyText: `Tiene ${upcomingBookings.length} reserva${upcomingBookings.length === 1 ? '' : 's'} activa${upcomingBookings.length === 1 ? '' : 's'}.`,
+        buttons: [
+          { id: 'manage:view', title: 'Ver reservas' },
+          { id: 'manage:cancel', title: 'Cancelar cita' },
+          { id: 'menu:main', title: 'Volver' }
+        ]
+      }
+    });
+  }
+
+  async function handleViewBookingsIntent(clientId) {
+    const upcomingBookings = await bookingService.findUpcomingBookingsForClient(clientId, { limit: 10 });
+
+    if (!upcomingBookings.length) {
+      return buildReply({
+        intent: 'manage_bookings',
+        step: 'manage_bookings_empty',
+        text: 'No encuentro reservas proximas activas en este momento.',
+        collectedData: {},
+        outbound: {
+          kind: 'buttons',
+          bodyText: 'No hay reservas activas para mostrar.',
+          buttons: [
+            { id: 'menu:book', title: 'Reservar cita' },
+            { id: 'menu:main', title: 'Volver' }
+          ]
+        }
+      });
+    }
+
+    const summary = upcomingBookings
+      .slice(0, 10)
+      .map((booking, index) => `${index + 1}. ${booking.service.name} - ${dayjs(booking.scheduledAt).format('YYYY-MM-DD HH:mm')}`)
+      .join('\n');
+
+    return buildReply({
+      intent: 'manage_bookings',
+      step: 'viewing_bookings',
+      text: `Estas son sus proximas reservas:\n\n${summary}`,
+      collectedData: {},
+      outbound: {
+        kind: 'buttons',
+        bodyText: `Estas son sus proximas reservas:\n\n${summary}`,
+        buttons: [
+          { id: 'manage:cancel', title: 'Cancelar cita' },
+          { id: 'menu:main', title: 'Volver' }
         ]
       }
     });
@@ -775,7 +861,7 @@ function createChatOrchestrator({
           kind: 'buttons',
           bodyText: `Reserva encontrada: ${booking.service.name} el ${dayjs(booking.scheduledAt).format('YYYY-MM-DD HH:mm')}`,
           buttons: [
-            { id: `cancelconfirm:${booking.id}`, title: 'Cancelar cita' },
+            { id: `cancelconfirm:${booking.id}`, title: 'Si, cancelar' },
             { id: 'menu:main', title: 'Volver' }
           ]
         }
