@@ -14,13 +14,25 @@ function createGoogleCalendarClient() {
       return null;
     }
 
-    const auth = new google.auth.JWT({
-      email: env.googleClientEmail,
-      key: normalizedPrivateKey,
-      scopes: ['https://www.googleapis.com/auth/calendar']
-    });
+    try {
+      const auth = new google.auth.JWT({
+        email: env.googleClientEmail,
+        key: normalizedPrivateKey,
+        scopes: ['https://www.googleapis.com/auth/calendar']
+      });
 
-    return google.calendar({ version: 'v3', auth });
+      return google.calendar({ version: 'v3', auth });
+    } catch (error) {
+      logger.error('Google Calendar client initialization failed', {
+        error: error.message,
+        status: error.code || error.response?.status || null,
+        hasBeginMarker: normalizedPrivateKey.includes('BEGIN PRIVATE KEY'),
+        hasEndMarker: normalizedPrivateKey.includes('END PRIVATE KEY'),
+        privateKeyLength: normalizedPrivateKey.length || 0
+      });
+
+      throw mapCalendarError(error, 'No pude inicializar Google Calendar con las credenciales configuradas.');
+    }
   }
 
   async function getAvailableSlots({ calendarId, date, durationMinutes }) {
@@ -258,6 +270,19 @@ function buildChileDateTime(date, hour, minute) {
 
 function mapCalendarError(error, fallbackMessage) {
   const status = error.code || error.response?.status || 500;
+  const message = String(error?.message || '');
+
+  if (
+    status === 'ERR_OSSL_UNSUPPORTED' ||
+    /DECODER routines::unsupported/i.test(message) ||
+    /PEM routines/i.test(message) ||
+    /private key/i.test(message)
+  ) {
+    return new AppError(
+      'No pude inicializar Google Calendar. Revisa el formato de GOOGLE_CALENDAR_PRIVATE_KEY en Render.',
+      503
+    );
+  }
 
   if (status === 404) {
     return new AppError(
