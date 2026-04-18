@@ -257,6 +257,14 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
       service: booking.service
     });
 
+    logger.info('Created Google Calendar event for booking', {
+      bookingId: booking.id,
+      calendarEventId: event.id,
+      serviceName: booking.service.name,
+      scheduledAt: booking.scheduledAt.toISOString(),
+      calendarId: booking.service.calendarId || env.googleDefaultCalendarId
+    });
+
     await prisma.paymentLink.updateMany({
       where: { bookingId },
       data: { status: 'APPROVED' }

@@ -169,14 +169,26 @@ function createChatOrchestrator({
     }
 
     if (selectedAction?.type === 'menu' && selectedAction.value === 'manage') {
+      logger.info('Opening manage bookings menu', {
+        clientId: client.id,
+        whatsappNumber: client.whatsappNumber
+      });
       return handleManageBookingsMenu(client.id);
     }
 
     if (selectedAction?.type === 'manage' && selectedAction.value === 'view') {
+      logger.info('Viewing upcoming bookings', {
+        clientId: client.id,
+        whatsappNumber: client.whatsappNumber
+      });
       return handleViewBookingsIntent(client.id);
     }
 
     if (selectedAction?.type === 'manage' && selectedAction.value === 'cancel') {
+      logger.info('Entering cancellation selection flow', {
+        clientId: client.id,
+        whatsappNumber: client.whatsappNumber
+      });
       return handleCancelBookingIntent(client.id);
     }
 
@@ -190,6 +202,11 @@ function createChatOrchestrator({
     }
 
     if (selectedAction?.type === 'cancelbooking') {
+      logger.info('Selected booking for cancellation review', {
+        clientId: client.id,
+        whatsappNumber: client.whatsappNumber,
+        bookingId: selectedAction.value
+      });
       const upcomingBookings = await bookingService.findUpcomingBookingsForClient(client.id, { limit: 10 });
       const selectedBooking = upcomingBookings.find((booking) => booking.id === selectedAction.value);
 
@@ -219,6 +236,11 @@ function createChatOrchestrator({
     }
 
     if (selectedAction?.type === 'cancelconfirm') {
+      logger.warn('Confirmed booking cancellation from chat flow', {
+        clientId: client.id,
+        whatsappNumber: client.whatsappNumber,
+        bookingId: selectedAction.value
+      });
       const cancelledBooking = await bookingService.cancelBooking(selectedAction.value);
 
       const wasPaid = cancelledBooking.paymentStatus === 'APPROVED';

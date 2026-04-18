@@ -8,7 +8,7 @@ async function main() {
   const app = createApp(dependencies);
 
   logger.info('Build marker', {
-    buildMarker: 'date-selection-v2'
+    buildMarker: 'manage-flow-v2-calendar-debug'
   });
 
   app.listen(env.port, () => {

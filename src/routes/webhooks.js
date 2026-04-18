@@ -25,6 +25,14 @@ function createWebhookRouter(dependencies) {
     const verified = metaClient.verifySignature(signature, req.rawBody);
 
     if (!verified) {
+      console.warn(JSON.stringify({
+        level: 'warn',
+        message: 'Rejected Meta webhook with invalid signature',
+        path: req.originalUrl,
+        userAgent: req.headers['user-agent'] || null,
+        forwardedFor: req.headers['x-forwarded-for'] || null,
+        remoteAddress: req.ip || null
+      }));
       throw new AppError('Invalid Meta signature', 401);
     }
 
