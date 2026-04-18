@@ -415,7 +415,7 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
       throw new AppError('Booking not found', 404);
     }
 
-    if (booking.paymentLink) {
+    if (booking.paymentLink && !shouldRefreshPaymentLink(booking.paymentLink)) {
       return booking.paymentLink;
     }
 
@@ -425,6 +425,25 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
       currency: booking.service.currency,
       description: `Abono ${booking.service.name} - ${bookingId}`
     });
+
+    if (booking.paymentLink) {
+      logger.info('Refreshing existing payment link for booking', {
+        bookingId,
+        previousProvider: booking.paymentLink.provider,
+        nextProvider: paymentLink.provider
+      });
+
+      return prisma.paymentLink.update({
+        where: { bookingId },
+        data: {
+          provider: paymentLink.provider,
+          url: paymentLink.url,
+          amount: paymentLink.amount,
+          currency: paymentLink.currency,
+          status: paymentLink.status
+        }
+      });
+    }
 
     return prisma.paymentLink.create({
       data: {
@@ -595,6 +614,22 @@ function normalizePayerData(payer, client) {
     formalId: payer?.formalId || client.formalId || null,
     email: payer?.email || null
   };
+}
+
+function shouldRefreshPaymentLink(paymentLink) {
+  if (!paymentLink?.url) {
+    return true;
+  }
+
+  if (paymentLink.status === 'EXPIRED' || paymentLink.status === 'CANCELLED') {
+    return true;
+  }
+
+  if (env.mercadoPagoAccessToken && paymentLink.provider !== 'mercadopago') {
+    return true;
+  }
+
+  return false;
 }
 
 module.exports = { createBookingService };

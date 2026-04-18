@@ -1,6 +1,7 @@
 const { MercadoPagoConfig, Preference } = require('mercadopago');
 
 const { env } = require('../config/env');
+const { AppError } = require('./errors');
 const { logger } = require('./logger');
 
 function createPaymentProvider(overrides = {}) {
@@ -47,14 +48,27 @@ function createPaymentProvider(overrides = {}) {
     }
 
     const response = await preferenceClient.create({ body });
+    const paymentUrl = response.init_point || response.sandbox_init_point || response.body?.init_point || response.body?.sandbox_init_point;
+
+    if (!paymentUrl) {
+      logger.error('Mercado Pago preference created without checkout URL', {
+        bookingId,
+        responseKeys: Object.keys(response || {}),
+        bodyKeys: Object.keys(response?.body || {})
+      });
+
+      throw new AppError('Mercado Pago no devolvio un link de pago valido.', 502);
+    }
+
     logger.info('Mercado Pago preference created', {
       bookingId,
-      preferenceId: response.id || response.body?.id || null
+      preferenceId: response.id || response.body?.id || null,
+      hasInitPoint: Boolean(paymentUrl)
     });
 
     return {
       provider: 'mercadopago',
-      url: response.init_point || response.sandbox_init_point || response.body?.init_point,
+      url: paymentUrl,
       amount,
       currency,
       status: 'PENDING'

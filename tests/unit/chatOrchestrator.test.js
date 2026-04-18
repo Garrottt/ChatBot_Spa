@@ -956,3 +956,122 @@ test('proof image accepts receipts without visible RUT when amount, name and tim
     assert.equal(sentMessages[0].kind, 'buttons');
     assert.match(sentMessages[0].bodyText, /quedo confirmada/i);
   });
+
+test('proof image with lower amount offers partial payment options instead of rejecting the receipt', async () => {
+  const { orchestrator, sentMessages, conversation } = createDependencies({
+    client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'booking',
+      currentStep: 'awaiting_payment_proof',
+      collectedData: { bookingId: 'booking-1', serviceId: 'svc-1', date: '2026-04-15', time: '10:00' },
+      lastBookingId: 'booking-1'
+    },
+    bookingService: {
+      recordPaymentProofSubmission: async () => ({
+        id: 'booking-1',
+        depositAmount: 10000,
+        createdAt: '2026-04-15T12:00:00.000Z',
+        holdExpiresAt: '2026-04-15T12:10:00.000Z',
+        service: { name: 'Limpieza facial profunda', currency: 'CLP' },
+        client: { name: 'Gonza', lastName: 'Perez', formalId: '210931468' }
+      })
+    },
+    openAIService: {
+      validatePaymentProof: async () => ({
+        isValid: false,
+        reason: 'El monto no coincide, pero el comprobante parece autentico.',
+        detectedAmount: 4300,
+        payerName: 'Gonza Perez',
+        payerFormalId: '210931468',
+        paymentTimestamp: '2026-04-15T09:05:00-03:00',
+        transactionId: 'tx-4300',
+        confidence: 0.92
+      })
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-proof-partial',
+    from: '56911111111',
+    type: 'image',
+    text: '',
+    selectedId: null,
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    media: {
+      id: 'media-proof-partial',
+      mimeType: 'image/png',
+      caption: ''
+    }
+  });
+
+  assert.equal(sentMessages[0].kind, 'text');
+  assert.match(sentMessages[0].text, /Recibimos su comprobante por 4300 CLP/i);
+  assert.match(sentMessages[0].text, /Le faltan 5700 CLP/i);
+  assert.match(sentMessages[0].text, /Transferir los 5700 CLP restantes/i);
+  assert.equal(conversation.currentStep, 'awaiting_partial_supplement');
+  assert.equal(conversation.collectedData.partialAmountPaid, 4300);
+});
+
+test('proof image with higher amount confirms booking and explains the extra credit', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'booking',
+      currentStep: 'awaiting_payment_proof',
+      collectedData: { bookingId: 'booking-1', serviceId: 'svc-1', date: '2026-04-15', time: '11:30' },
+      lastBookingId: 'booking-1'
+    },
+    bookingService: {
+      recordPaymentProofSubmission: async () => ({
+        id: 'booking-1',
+        depositAmount: 100,
+        createdAt: '2026-04-15T12:00:00.000Z',
+        holdExpiresAt: '2026-04-15T12:10:00.000Z',
+        service: { name: 'Limpieza facial profunda', currency: 'CLP' },
+        client: { name: 'Gonza', lastName: 'Perez', formalId: '210931468' }
+      }),
+      confirmPendingBooking: async () => ({
+        id: 'booking-1',
+        depositAmount: 100,
+        scheduledAt: '2026-04-15T14:30:00.000Z',
+        service: { name: 'Limpieza facial profunda', currency: 'CLP' }
+      })
+    },
+    openAIService: {
+      craftBookingReply: async ({ fallbackMessage }) => fallbackMessage,
+      validatePaymentProof: async () => ({
+        isValid: false,
+        reason: 'El monto es mayor al requerido, pero el comprobante parece autentico.',
+        detectedAmount: 150,
+        payerName: 'Gonza Perez',
+        payerFormalId: '210931468',
+        paymentTimestamp: '2026-04-15T09:05:00-03:00',
+        transactionId: 'tx-150',
+        confidence: 0.94
+      })
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-proof-overpay',
+    from: '56911111111',
+    type: 'image',
+    text: '',
+    selectedId: null,
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    media: {
+      id: 'media-proof-overpay',
+      mimeType: 'image/png',
+      caption: ''
+    }
+  });
+
+  assert.equal(sentMessages[0].kind, 'buttons');
+  assert.match(sentMessages[0].bodyText, /quedo confirmada/i);
+  assert.match(sentMessages[0].bodyText, /abono 150 CLP/i);
+  assert.match(sentMessages[0].bodyText, /descontaremos los 50 CLP adicionales/i);
+});

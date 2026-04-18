@@ -47,6 +47,7 @@ function createPrismaStub(overrides = {}) {
     },
     paymentLink: {
       create: async ({ data }) => ({ id: 'payment-1', ...data }),
+      update: async ({ where, data }) => ({ id: 'payment-1', bookingId: where.bookingId, ...data }),
       updateMany: async () => ({ count: 1 }),
       ...(overrides.paymentLink || {})
     }
@@ -84,6 +85,52 @@ test('ensurePaymentLink uses fixed deposit amount instead of service price', asy
   await bookingService.ensurePaymentLink('booking-1');
 
   assert.equal(receivedAmount, 100);
+});
+
+test('ensurePaymentLink refreshes stale manual links when Mercado Pago is configured', async () => {
+  let updatedProvider = null;
+  let updatedUrl = null;
+
+  const bookingService = createBookingService({
+    prisma: createPrismaStub({
+      booking: {
+        findUnique: async () => ({
+          id: 'booking-1',
+          service: { name: 'Masaje relajante', price: 35000, currency: 'CLP' },
+          paymentLink: {
+            id: 'payment-1',
+            provider: 'manual-link',
+            url: 'https://pagos.tu-spa.cl/booking/booking-1',
+            status: 'PENDING'
+          }
+        })
+      },
+      paymentLink: {
+        update: async ({ data }) => {
+          updatedProvider = data.provider;
+          updatedUrl = data.url;
+          return { id: 'payment-1', bookingId: 'booking-1', ...data };
+        }
+      }
+    }),
+    googleCalendar: {},
+    paymentProvider: {
+      createPaymentLink: async () => ({
+        provider: 'mercadopago',
+        url: 'https://mercadopago.test/checkout/pref-refresh',
+        amount: 100,
+        currency: 'CLP',
+        status: 'PENDING'
+      })
+    },
+    serviceCatalogService: {}
+  });
+
+  const paymentLink = await bookingService.ensurePaymentLink('booking-1');
+
+  assert.equal(updatedProvider, 'mercadopago');
+  assert.match(updatedUrl, /mercadopago\.test/);
+  assert.equal(paymentLink.provider, 'mercadopago');
 });
 
 test('confirmPendingBooking creates the Google Calendar event only after payment approval', async () => {

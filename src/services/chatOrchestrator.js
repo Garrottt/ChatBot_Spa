@@ -965,10 +965,6 @@ function resolvePaymentProofRejectionReason(booking, validation) {
     return 'No se pudo leer con claridad el monto del comprobante.';
   }
 
-  if (validation.detectedAmount !== booking.depositAmount) {
-    return `El monto del comprobante no coincide con el abono requerido. Esperado: ${booking.depositAmount}. Detectado: ${validation.detectedAmount}.`;
-  }
-
   const expectedName = normalizePersonName(getExpectedPayerName(booking));
   const detectedName = normalizePersonName(validation.payerName);
   if (!expectedName || !detectedName || !personNameMatches(expectedName, detectedName)) {
