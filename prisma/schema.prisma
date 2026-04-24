@@ -74,6 +74,7 @@ model Message {
   messageType     String
   content         String
   providerId      String?
+  mediaUrl        String?       @map("media_url")
   metadata        Json?
   createdAt       DateTime      @default(now())
   conversation    Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)

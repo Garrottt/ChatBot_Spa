@@ -31,7 +31,8 @@ function createChatOrchestrator({
   bookingService,
   serviceCatalogService,
   metaClient,
-  chatwootService
+  chatwootService,
+  mediaService
 }) {
   const welcomeFlow = createWelcomeFlow();
   const servicesFlow = createServicesFlow({ serviceCatalogService });
@@ -56,9 +57,9 @@ function createChatOrchestrator({
       whatsappNumber: message.from,
       name: message.profileName
     });
-    const conversation = await conversationService.getOrCreateActiveConversation(client.id);
+    let conversation = await conversationService.getOrCreateActiveConversation(client.id);
 
-    await messageService.createIncomingMessage({
+    const createdIncomingMessage = await messageService.createIncomingMessage({
       conversationId: conversation.id,
       clientId: client.id,
       content: message.text || message.selectedId || message.media?.caption || '',
@@ -71,6 +72,32 @@ function createChatOrchestrator({
         media: message.media || null
       }
     });
+
+    if (message.media?.id && mediaService?.persistIncomingMedia) {
+      try {
+        await mediaService.persistIncomingMedia({
+          messageRecord: createdIncomingMessage,
+          media: message.media
+        });
+      } catch (error) {
+        logger.error('Media persistence failed for incoming message', {
+          conversationId: conversation.id,
+          clientId: client.id,
+          providerMessageId: message.providerMessageId,
+          mediaId: message.media.id,
+          error: error.message
+        });
+      }
+    }
+
+    if (conversationService.isBotPaused?.(conversation) && conversationService.shouldAutoResume?.(conversation)) {
+      conversation = await conversationService.resumeBotConversation(conversation.id);
+      logger.warn('Auto-resumed stale manual control conversation', {
+        conversationId: conversation.id,
+        clientId: client.id,
+        takenOverAt: conversation.takenOverAt || null
+      });
+    }
 
     if (conversationService.isBotPaused?.(conversation)) {
       await conversationService.touchConversation?.(conversation.id);

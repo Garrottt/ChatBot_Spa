@@ -53,11 +53,30 @@ function createMessageService({ prisma }) {
     });
   }
 
+  async function findById(id) {
+    if (!id) {
+      return null;
+    }
+
+    return prisma.message.findUnique({
+      where: { id }
+    });
+  }
+
+  async function updateMessage(id, data) {
+    return prisma.message.update({
+      where: { id },
+      data
+    });
+  }
+
   return {
     findIncomingByProviderId,
     createIncomingMessage,
     createOutgoingMessage,
-    findOutgoingByProviderId
+    findOutgoingByProviderId,
+    findById,
+    updateMessage
   };
 }
 

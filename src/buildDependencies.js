@@ -13,6 +13,7 @@ const { createBookingService } = require('./services/bookingService');
 const { createChatOrchestrator } = require('./services/chatOrchestrator');
 const { createChatwootService } = require('./services/chatwootService');
 const { createReminderService } = require('./services/reminderService');
+const { createMediaService } = require('./services/mediaService');
 
 async function buildDependencies(overrides = {}) {
   const prisma = overrides.prisma || new PrismaClient();
@@ -37,6 +38,10 @@ async function buildDependencies(overrides = {}) {
     messageService,
     metaClient
   });
+  const mediaService = overrides.mediaService || createMediaService({
+    messageService,
+    metaClient
+  });
   const reminderService = overrides.reminderService || createReminderService({
     prisma,
     metaClient,
@@ -52,7 +57,8 @@ async function buildDependencies(overrides = {}) {
     serviceCatalogService,
     paymentProvider,
     metaClient,
-    chatwootService
+    chatwootService,
+    mediaService
   });
 
   return {
@@ -66,6 +72,7 @@ async function buildDependencies(overrides = {}) {
     metaClient,
     chatwootClient,
     chatwootService,
+    mediaService,
     paymentProvider,
     googleCalendar,
     reminderService,

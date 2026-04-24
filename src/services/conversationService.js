@@ -1,3 +1,5 @@
+const { env } = require('../config/env');
+
 function createConversationService({ prisma }) {
   async function getOrCreateActiveConversation(clientId) {
     const existing = await prisma.conversation.findFirst({
@@ -78,8 +80,43 @@ function createConversationService({ prisma }) {
     });
   }
 
+  async function resumeBotConversation(id) {
+    return prisma.conversation.update({
+      where: { id },
+      data: {
+        botPaused: false,
+        takenOverByAgent: false,
+        takenOverAt: null,
+        takenOverByUserId: null
+      }
+    });
+  }
+
   function isBotPaused(conversation) {
     return Boolean(conversation?.botPaused || conversation?.takenOverByAgent);
+  }
+
+  function shouldAutoResume(conversation) {
+    if (!isBotPaused(conversation)) {
+      return false;
+    }
+
+    const timeoutMinutes = Number(env.manualTakeoverTimeoutMinutes || 0);
+    if (!conversation?.takenOverAt) {
+      return true;
+    }
+
+    if (timeoutMinutes <= 0) {
+      return false;
+    }
+
+    const takenOverAt = new Date(conversation.takenOverAt);
+    if (Number.isNaN(takenOverAt.getTime())) {
+      return true;
+    }
+
+    const elapsedMs = Date.now() - takenOverAt.getTime();
+    return elapsedMs >= timeoutMinutes * 60 * 1000;
   }
 
   return {
@@ -89,7 +126,9 @@ function createConversationService({ prisma }) {
     findByChatwootConversationId,
     findById,
     touchConversation,
-    isBotPaused
+    resumeBotConversation,
+    isBotPaused,
+    shouldAutoResume
   };
 }
 

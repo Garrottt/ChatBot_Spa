@@ -41,12 +41,27 @@ function createDependencies(overrides = {}) {
       getOrCreateActiveConversation: async () => conversation,
       updateConversation: async (_id, data) => Object.assign(conversation, data),
       touchConversation: async () => ({}),
+      resumeBotConversation: async () => Object.assign(conversation, {
+        botPaused: false,
+        takenOverByAgent: false,
+        takenOverAt: null,
+        takenOverByUserId: null
+      }),
       isBotPaused: (currentConversation) => Boolean(currentConversation.botPaused || currentConversation.takenOverByAgent),
+      shouldAutoResume: () => false,
       ...(overrides.conversationService || {})
     },
     messageService: {
       findIncomingByProviderId: async () => null,
-      createIncomingMessage: async () => ({}),
+      createIncomingMessage: async ({ metadata, messageType, providerId, content, conversationId, clientId }) => ({
+        id: 'message-1',
+        metadata,
+        messageType,
+        providerId,
+        content,
+        conversationId,
+        clientId
+      }),
       createOutgoingMessage: async () => ({}),
       ...(overrides.messageService || {})
     },
@@ -111,7 +126,12 @@ function createDependencies(overrides = {}) {
         mimeType: 'image/png'
       }),
       ...(overrides.metaClient || {})
-    }
+    },
+    mediaService: {
+      persistIncomingMedia: async () => ({ mediaUrl: 'http://localhost:3000/api/media/messages/message-1' }),
+      ...(overrides.mediaService || {})
+    },
+    ...(overrides.dependencies || {})
   });
 
   return {
@@ -193,6 +213,37 @@ test('full name entry stores name and last name together before asking for the R
   assert.equal(client.name, 'Gonza');
   assert.equal(client.lastName, 'Perez');
   assert.match(sentMessages[0].text, /RUT o identificador/i);
+});
+
+test('incoming image persists a stable media url for CRM rendering', async () => {
+  let persistedMedia = null;
+  const { orchestrator } = createDependencies({
+    mediaService: {
+      persistIncomingMedia: async (payload) => {
+        persistedMedia = payload;
+        return { mediaUrl: 'http://localhost:3000/api/media/messages/message-1' };
+      }
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-image-1',
+    from: '56911111111',
+    type: 'image',
+    text: 'comprobante',
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    selectedId: null,
+    media: {
+      id: 'media-1',
+      mimeType: 'image/png',
+      sha256: 'abc',
+      caption: 'comprobante'
+    }
+  });
+
+  assert.equal(persistedMedia.media.id, 'media-1');
+  assert.equal(persistedMedia.messageRecord.id, 'message-1');
 });
 
 test('after selecting time with missing formal id the bot asks for personal data', async () => {
@@ -802,6 +853,50 @@ test('manual takeover prevents automatic replies while still storing the incomin
   assert.equal(incomingSaved, 1);
   assert.equal(touched, 1);
   assert.equal(sentMessages.length, 0);
+});
+
+test('stale manual takeover is auto-resumed and the bot replies again', async () => {
+  let resumed = 0;
+  const { orchestrator, sentMessages, conversation } = createDependencies({
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'unknown',
+      currentStep: 'idle',
+      collectedData: null,
+      lastBookingId: null,
+      botPaused: true,
+      takenOverByAgent: true,
+      takenOverAt: '2026-04-20T10:00:00.000Z'
+    },
+    conversationService: {
+      shouldAutoResume: () => true,
+      resumeBotConversation: async () => {
+        resumed += 1;
+        return Object.assign(conversation, {
+          botPaused: false,
+          takenOverByAgent: false,
+          takenOverAt: null,
+          takenOverByUserId: null
+        });
+      }
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-auto-resume',
+    from: '56911111111',
+    type: 'text',
+    text: 'hola',
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    selectedId: null,
+    media: null
+  });
+
+  assert.equal(resumed, 1);
+  assert.equal(sentMessages.length, 1);
+  assert.equal(conversation.botPaused, false);
+  assert.equal(conversation.takenOverByAgent, false);
 });
 
 test('manage reservations flow opens a safe management menu instead of cancelling directly', async () => {

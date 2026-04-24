@@ -12,6 +12,7 @@ const { createBookingRouter } = require('./routes/bookings');
 const { createPaymentRouter } = require('./routes/payments');
 const { createServiceRouter } = require('./routes/services');
 const { createCrmRouter } = require('./routes/crm');
+const { createMediaRouter } = require('./routes/media');
 
 function createApp(dependencies) {
   const app = express();
@@ -39,6 +40,7 @@ function createApp(dependencies) {
   app.use('/api/payments', createPaymentRouter(dependencies));
   app.use('/api/services', createServiceRouter(dependencies));
   app.use('/api/crm', createCrmRouter(dependencies));
+  app.use('/api/media', createMediaRouter(dependencies));
 
   app.use(notFoundHandler);
   app.use(errorHandler);
