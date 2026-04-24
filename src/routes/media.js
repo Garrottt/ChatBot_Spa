@@ -11,6 +11,7 @@ function createMediaRouter(dependencies) {
 
     res.setHeader('Content-Type', media.mimeType || 'application/octet-stream');
     res.setHeader('Cache-Control', 'public, max-age=300');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     res.send(media.buffer);
   }));
 
