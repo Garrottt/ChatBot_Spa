@@ -58,11 +58,38 @@ function createConversationService({ prisma }) {
     });
   }
 
+  async function findById(id, options = {}) {
+    if (!id) {
+      return null;
+    }
+
+    return prisma.conversation.findUnique({
+      where: { id },
+      ...options
+    });
+  }
+
+  async function touchConversation(id) {
+    return prisma.conversation.update({
+      where: { id },
+      data: {
+        updatedAt: new Date()
+      }
+    });
+  }
+
+  function isBotPaused(conversation) {
+    return Boolean(conversation?.botPaused || conversation?.takenOverByAgent);
+  }
+
   return {
     getOrCreateActiveConversation,
     updateConversation,
     mergeCollectedData,
-    findByChatwootConversationId
+    findByChatwootConversationId,
+    findById,
+    touchConversation,
+    isBotPaused
   };
 }
 

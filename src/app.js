@@ -11,6 +11,7 @@ const { createChatwootRouter } = require('./routes/chatwoot');
 const { createBookingRouter } = require('./routes/bookings');
 const { createPaymentRouter } = require('./routes/payments');
 const { createServiceRouter } = require('./routes/services');
+const { createCrmRouter } = require('./routes/crm');
 
 function createApp(dependencies) {
   const app = express();
@@ -37,6 +38,7 @@ function createApp(dependencies) {
   app.use('/api/bookings', createBookingRouter(dependencies));
   app.use('/api/payments', createPaymentRouter(dependencies));
   app.use('/api/services', createServiceRouter(dependencies));
+  app.use('/api/crm', createCrmRouter(dependencies));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

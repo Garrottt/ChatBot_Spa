@@ -54,6 +54,10 @@ model Conversation {
   currentStep     String      @default("idle")
   collectedData   Json?
   lastBookingId   String?
+  botPaused       Boolean     @default(false) @map("bot_paused")
+  takenOverByAgent Boolean    @default(false) @map("taken_over_by_agent")
+  takenOverAt     DateTime?   @map("taken_over_at")
+  takenOverByUserId String?   @map("taken_over_by_user_id")
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   client          Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -94,6 +98,7 @@ model Booking {
   id                  String          @id @default(cuid())
   clientId            String
   serviceId           String
+  specialistId        String?
   status              BookingStatus   @default(PENDING)
   paymentMethod       PaymentMethod?
   paymentStatus       PaymentStatus   @default(PENDING)

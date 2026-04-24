@@ -72,6 +72,23 @@ function createChatOrchestrator({
       }
     });
 
+    if (conversationService.isBotPaused?.(conversation)) {
+      await conversationService.touchConversation?.(conversation.id);
+      logger.info('Bot reply skipped because conversation is under manual control', {
+        conversationId: conversation.id,
+        clientId: client.id,
+        botPaused: Boolean(conversation.botPaused),
+        takenOverByAgent: Boolean(conversation.takenOverByAgent)
+      });
+
+      return buildReply({
+        intent: 'agent_controlled',
+        step: conversation.currentStep || 'manual_control',
+        text: 'Conversacion en control manual.',
+        collectedData: conversation.collectedData || {}
+      });
+    }
+
     if (chatwootService) {
       try {
         await chatwootService.captureIncomingMessage({
