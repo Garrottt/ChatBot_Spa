@@ -21,6 +21,10 @@ function extractJson(content) {
 function localIntentClassifier(text) {
   const normalized = text.toLowerCase();
 
+  if (/(mis reservas|mi reserva|mis horas|mi hora|mi cita|mis citas|tengo .*reserv|tengo .*hora|tengo .*cita|que hora (era|es)|cual es mi hora|cual era mi hora|me olvide.*hora|me olvid[eé].*cita|recuerdame.*hora|revis(a|e).*reserv|puedes revisar.*reserv|ver.*reservas?)/.test(normalized)) {
+    return { intent: 'manage_bookings', confidence: 0.9, entities: {} };
+  }
+
   if (/(reserv|agendar|agenda|hora|cita|turno|quiero ir|quiero atenderme)/.test(normalized)) {
     return { intent: 'booking', confidence: 0.92, entities: {} };
   }
@@ -58,7 +62,7 @@ function normalizeIntentResult(rawResult, text) {
   }
 
   const normalizedIntent = String(rawResult.intent || '').trim().toLowerCase();
-  const allowedIntents = new Set(['booking', 'faq', 'cancel_booking', 'reschedule_booking', 'unknown']);
+  const allowedIntents = new Set(['booking', 'faq', 'cancel_booking', 'reschedule_booking', 'manage_bookings', 'unknown']);
 
   return {
     intent: allowedIntents.has(normalizedIntent) ? normalizedIntent : fallback.intent,

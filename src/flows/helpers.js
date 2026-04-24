@@ -75,6 +75,12 @@ function asksForTimeRemaining(text) {
   return /(cu[aá]nto (tiempo|minutos?|me queda|falta)|tiempo (me queda|tengo|falta|queda)|minutos? (me quedan?|faltan?|tengo|quedan?)|cuanto (me queda|falta)|me (quedan?|faltan?) cuanto|tiempo restante|tiempo (disponible|limite)|cuando (vence|expira)|sigue (reservado|vigente|activo)|todav[ií]a (tengo|queda|hay))/.test(String(text || '').toLowerCase());
 }
 
+function asksForBookingStatus(text) {
+  return /(mis reservas|mi reserva|mis horas|mi hora|mi cita|mis citas|tengo .*reserv|tengo .*hora|tengo .*cita|que hora (era|es)|cual es mi hora|cual era mi hora|me olvide.*hora|me olvid[eé].*cita|recuerdame.*hora|revis(a|e).*reserv|puedes revisar.*reserv|ver.*reservas?)/.test(
+    String(text || '').toLowerCase()
+  );
+}
+
 function inferDeterministicIntent(text, matchedService, selectedAction) {
   if (matchedService || selectedAction?.type === 'service' || selectedAction?.type === 'slot') {
     return 'booking';
@@ -94,6 +100,10 @@ function inferDeterministicIntent(text, matchedService, selectedAction) {
 
   if (/(reagend|reprogram|cambiar hora|mover)/.test(text)) {
     return 'reschedule_booking';
+  }
+
+  if (asksForBookingStatus(text)) {
+    return 'manage_bookings';
   }
 
   if (/(reserv|agendar|agenda|hora|cita|turno)/.test(text)) {
@@ -136,6 +146,7 @@ function inferPaymentMethod(text, selectedAction) {
 
 module.exports = {
   asksForBusinessInfo,
+  asksForBookingStatus,
   asksForTimeRemaining,
   buildReply,
   inferDeterministicIntent,

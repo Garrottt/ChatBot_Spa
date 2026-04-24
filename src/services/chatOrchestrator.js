@@ -347,6 +347,10 @@ function createChatOrchestrator({
       });
     }
 
+    if (resolvedIntent === 'manage_bookings') {
+      return handleBookingStatusIntent(client.id);
+    }
+
     if (resolvedIntent === 'booking' && canStartBookingFromContext(conversation.currentStep)) {
       return bookingFlow.startBookingFlow(client, collectedData);
     }
@@ -834,6 +838,36 @@ function createChatOrchestrator({
         ]
       }
     });
+  }
+
+  async function handleBookingStatusIntent(clientId) {
+    const upcomingBookings = await bookingService.findUpcomingBookingsForClient(clientId, { limit: 10 });
+
+    if (!upcomingBookings.length) {
+      return handleViewBookingsIntent(clientId);
+    }
+
+    if (upcomingBookings.length === 1) {
+      const booking = upcomingBookings[0];
+      const scheduledAt = dayjs(booking.scheduledAt).format('YYYY-MM-DD HH:mm');
+
+      return buildReply({
+        intent: 'manage_bookings',
+        step: 'viewing_bookings',
+        text: `📅 Su proxima reserva es para ${booking.service.name} el ${scheduledAt}.`,
+        collectedData: {},
+        outbound: {
+          kind: 'buttons',
+          bodyText: `📅 Su proxima reserva\n${booking.service.name}\n${scheduledAt}`,
+          buttons: [
+            { id: 'manage:cancel', title: 'Cancelar cita' },
+            { id: 'menu:main', title: 'Volver' }
+          ]
+        }
+      });
+    }
+
+    return handleViewBookingsIntent(clientId);
   }
 
   async function handleViewBookingsIntent(clientId) {

@@ -6,7 +6,15 @@ const { createChatOrchestrator } = require('../../src/services/chatOrchestrator'
 function createDependencies(overrides = {}) {
   const sentMessages = [];
   const client = overrides.client || { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: null };
-  const conversation = overrides.conversation || { id: 'conv-1', currentIntent: 'unknown', currentStep: 'idle', collectedData: null, lastBookingId: null };
+  const conversation = overrides.conversation || {
+    id: 'conv-1',
+    currentIntent: 'unknown',
+    currentStep: 'idle',
+    collectedData: null,
+    lastBookingId: null,
+    botPaused: false,
+    takenOverByAgent: false
+  };
 
   const orchestrator = createChatOrchestrator({
     openAIService: {
@@ -32,6 +40,8 @@ function createDependencies(overrides = {}) {
     conversationService: {
       getOrCreateActiveConversation: async () => conversation,
       updateConversation: async (_id, data) => Object.assign(conversation, data),
+      touchConversation: async () => ({}),
+      isBotPaused: (currentConversation) => Boolean(currentConversation.botPaused || currentConversation.takenOverByAgent),
       ...(overrides.conversationService || {})
     },
     messageService: {
@@ -685,7 +695,15 @@ test('duplicate incoming provider ids are ignored and do not send another reply'
       updateClient: async () => ({})
     },
     conversationService: {
-      getOrCreateActiveConversation: async () => ({ id: 'conv-1', currentIntent: 'unknown', currentStep: 'idle', collectedData: null, lastBookingId: null }),
+      getOrCreateActiveConversation: async () => ({
+        id: 'conv-1',
+        currentIntent: 'unknown',
+        currentStep: 'idle',
+        collectedData: null,
+        lastBookingId: null,
+        botPaused: false,
+        takenOverByAgent: false
+      }),
       updateConversation: async () => ({})
     },
     messageService: {
@@ -732,6 +750,57 @@ test('duplicate incoming provider ids are ignored and do not send another reply'
   });
 
   assert.equal(reply.intent, 'duplicate');
+  assert.equal(sentMessages.length, 0);
+});
+
+test('manual takeover prevents automatic replies while still storing the incoming message', async () => {
+  let incomingSaved = 0;
+  let touched = 0;
+  const { orchestrator, sentMessages } = createDependencies({
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'faq',
+      currentStep: 'manual_control',
+      collectedData: { serviceId: 'svc-1' },
+      lastBookingId: null,
+      botPaused: true,
+      takenOverByAgent: true
+    },
+    conversationService: {
+      touchConversation: async () => {
+        touched += 1;
+      }
+    },
+    messageService: {
+      createIncomingMessage: async () => {
+        incomingSaved += 1;
+        return {};
+      },
+      createOutgoingMessage: async () => {
+        throw new Error('should not create automatic outgoing messages while paused');
+      }
+    },
+    openAIService: {
+      classifyIntent: async () => {
+        throw new Error('should not classify messages while paused');
+      }
+    }
+  });
+
+  const reply = await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-paused',
+    from: '56911111111',
+    type: 'text',
+    text: 'Necesito ayuda humana',
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    selectedId: null,
+    media: null
+  });
+
+  assert.equal(reply.intent, 'agent_controlled');
+  assert.equal(incomingSaved, 1);
+  assert.equal(touched, 1);
   assert.equal(sentMessages.length, 0);
 });
 
@@ -819,6 +888,56 @@ test('view reservations shows upcoming bookings without entering cancellation fl
   assert.match(sentMessages[0].bodyText, /Estas son sus proximas reservas/i);
   assert.match(sentMessages[0].bodyText, /Masaje relajante/i);
   assert.match(sentMessages[0].bodyText, /Limpieza facial profunda/i);
+});
+
+test('booking status question answers with the next reservation instead of sending the main menu', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
+    bookingService: {
+      findUpcomingBookingsForClient: async () => ([
+        {
+          id: 'booking-1',
+          scheduledAt: '2026-04-15T10:00:00.000Z',
+          service: { name: 'Masaje relajante' }
+        }
+      ])
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-booking-status',
+    from: '56911111111',
+    type: 'text',
+    text: 'me olvide de que hora era, me la dices',
+    selectedId: null,
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    media: null
+  });
+
+  assert.equal(sentMessages[0].kind, 'buttons');
+  assert.match(sentMessages[0].bodyText, /Su proxima reserva/i);
+  assert.match(sentMessages[0].bodyText, /Masaje relajante/i);
+  assert.doesNotMatch(sentMessages[0].bodyText, /menu principal/i);
+});
+
+test('booking status question without reservations offers management alternatives', async () => {
+  const { orchestrator, sentMessages } = createDependencies();
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-booking-status-empty',
+    from: '56911111111',
+    type: 'text',
+    text: 'tengo alguna reserva?',
+    selectedId: null,
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    media: null
+  });
+
+  assert.equal(sentMessages[0].kind, 'buttons');
+  assert.match(sentMessages[0].bodyText, /No hay reservas activas para mostrar/i);
+  assert.equal(sentMessages[0].buttons[0].id, 'menu:book');
 });
 
 test('proof image is rejected when the payer name does not match the reservation data', async () => {
