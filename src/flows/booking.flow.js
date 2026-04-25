@@ -38,6 +38,15 @@ function buildDateListOutbound() {
   };
 }
 
+function parseSlotSelection(value) {
+  const parts = String(value || '').split(':');
+
+  return {
+    time: parts.length >= 2 ? `${parts[0]}:${parts[1]}` : String(value || ''),
+    specialistId: parts.length >= 3 ? parts.slice(2).join(':') : null
+  };
+}
+
 function createBookingFlow({
   bookingService,
   servicesFlow
@@ -113,7 +122,7 @@ function createBookingFlow({
     });
 
     const slotRows = quote.slots.slice(0, 10).map((slot) => ({
-      id: `slot:${normalizeSlotValue(slot.startsAt)}`,
+      id: ['slot', normalizeSlotValue(slot.startsAt), slot.specialistId].filter(Boolean).join(':'),
       title: dayjs(slot.startsAt).format('HH:mm'),
       description: `${quote.service.name} - ${quote.service.durationMinutes} min`
     }));
@@ -173,7 +182,8 @@ function createBookingFlow({
       });
     }
 
-    const normalizedTime = normalizeTimeInput(selectedValue);
+    const slotSelection = parseSlotSelection(selectedValue);
+    const normalizedTime = normalizeTimeInput(slotSelection.time);
     if (!looksLikeTime(normalizedTime)) {
       return buildReply({
         intent: 'booking',
@@ -185,7 +195,8 @@ function createBookingFlow({
 
     const nextCollectedData = {
       ...collectedData,
-      time: normalizedTime
+      time: normalizedTime,
+      specialistId: slotSelection.specialistId || collectedData.specialistId || null
     };
 
     if (!client.name || !client.lastName) {
@@ -294,7 +305,7 @@ function createBookingFlow({
   }
 
   async function initiatePaymentCollection({ client, collectedData, paymentMethod }) {
-    const { serviceId, date, time } = collectedData;
+    const { serviceId, date, time, specialistId } = collectedData;
 
     if (!serviceId || !date || !time) {
       return buildReply({
@@ -310,6 +321,7 @@ function createBookingFlow({
       clientId: client.id,
       serviceId,
       scheduledAt: `${date}T${time}:00`,
+      specialistId,
       paymentMethod,
       payer: {
         name: collectedData.payerName,
@@ -338,6 +350,7 @@ function createBookingFlow({
       collectedData: {
         bookingId: booking.id,
         serviceId,
+        specialistId: booking.specialistId || specialistId || null,
         date,
         time,
         paymentMethod

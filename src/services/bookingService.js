@@ -18,34 +18,19 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
     await expirePendingBookings();
 
     const service = await serviceCatalogService.getServiceById(serviceId);
-    const slots = await googleCalendar.getAvailableSlots({
-      calendarId: service.calendarId,
-      date: normalizedDate,
-      durationMinutes: service.durationMinutes
+    const specialistSlots = await buildSpecialistAvailabilitySlots({
+      service,
+      date: normalizedDate
     });
-
-    const blockingBookings = await findBlockingBookings({
-      serviceId,
-      dayStart: dayjs(normalizedDate).startOf('day').toDate(),
-      dayEnd: dayjs(normalizedDate).endOf('day').toDate()
-    });
-
     const now = dayjs();
-    const availableSlots = slots.filter((slot) => {
+    const availableSlots = specialistSlots.filter((slot) => {
       const slotStart = dayjs(slot.startsAt);
-      const slotEnd = dayjs(slot.endsAt || slot.startsAt).isValid()
-        ? dayjs(slot.endsAt || slot.startsAt)
-        : slotStart.add(service.durationMinutes, 'minute');
 
-      // Excluir slots que ya comenzaron o que ya pasaron
       if (!slotStart.isAfter(now)) {
         return false;
       }
 
-      return !blockingBookings.some((booking) =>
-        dayjs(booking.scheduledAt).isBefore(slotEnd) &&
-        dayjs(booking.endAt).isAfter(slotStart)
-      );
+      return true;
     });
 
     return {
@@ -60,11 +45,11 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
     };
   }
 
-  async function createBooking({ clientId, serviceId, scheduledAt, notes, paymentMethod, payer }) {
-    return createPendingBooking({ clientId, serviceId, scheduledAt, notes, paymentMethod, payer });
+  async function createBooking({ clientId, serviceId, scheduledAt, notes, paymentMethod, payer, specialistId }) {
+    return createPendingBooking({ clientId, serviceId, scheduledAt, notes, paymentMethod, payer, specialistId });
   }
 
-  async function createPendingBooking({ clientId, serviceId, scheduledAt, notes, paymentMethod, payer }) {
+  async function createPendingBooking({ clientId, serviceId, scheduledAt, notes, paymentMethod, payer, specialistId }) {
     const client = await prisma.client.findUnique({ where: { id: clientId } });
     if (!client) {
       throw new AppError('Client not found', 404);
@@ -93,10 +78,18 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
     await expirePendingBookings();
 
     const endAt = startAt.add(service.durationMinutes, 'minute');
+    const assignedSpecialistId = await resolveAvailableSpecialistForSlot({
+      service,
+      preferredSpecialistId: specialistId,
+      startAt,
+      endAt
+    });
+
     const activeHold = await prisma.booking.findFirst({
       where: {
         clientId,
         serviceId,
+        specialistId: assignedSpecialistId,
         status: 'PENDING',
         scheduledAt: startAt.toDate(),
         holdExpiresAt: { gt: new Date() }
@@ -124,6 +117,7 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
           paymentProofValidation: null,
           holdExpiresAt: dayjs().add(env.bookingHoldMinutes, 'minute').toDate(),
           depositAmount: env.bookingDepositAmount,
+          specialistId: assignedSpecialistId,
           notes: notes || activeHold.notes || null
         },
         include: {
@@ -136,6 +130,7 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
 
     const existingOverlap = await findOverlappingBooking({
       serviceId,
+      specialistId: assignedSpecialistId,
       startAt: startAt.toDate(),
       endAt: endAt.toDate()
     });
@@ -153,6 +148,7 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
           payerFormalId: payerData.formalId,
           payerEmail: payerData.email,
           scheduledAt: startAt.toDate(),
+        specialistId: assignedSpecialistId,
         endAt: endAt.toDate(),
         notes: notes || null,
         status: 'PENDING',
@@ -457,10 +453,110 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
     });
   }
 
-  async function findBlockingBookings({ serviceId, dayStart, dayEnd }) {
+  async function buildSpecialistAvailabilitySlots({ service, date }) {
+    const specialists = await findActiveSpecialistsForService(service.id);
+
+    if (!specialists.length) {
+      logger.warn('No active specialists found for service availability', {
+        serviceId: service.id,
+        serviceName: service.name
+      });
+      return [];
+    }
+
+    const dayOfWeek = getChileDayOfWeek(date);
+    const dayStart = buildChileDateTime(date, '00:00').toDate();
+    const dayEnd = buildChileDateTime(date, '23:59').toDate();
+    const slots = [];
+
+    for (const specialist of specialists) {
+      const availabilities = (specialist.availabilities || []).filter((availability) =>
+        Number(availability.dayOfWeek) === dayOfWeek
+      );
+
+      if (!availabilities.length) {
+        continue;
+      }
+
+      const blockingBookings = await findBlockingBookings({
+        serviceId: service.id,
+        specialistId: specialist.id,
+        dayStart,
+        dayEnd
+      });
+
+      for (const availability of availabilities) {
+        slots.push(...buildSlotsForAvailability({
+          date,
+          durationMinutes: service.durationMinutes,
+          specialist,
+          availability,
+          blockingBookings
+        }));
+      }
+    }
+
+    return slots
+      .sort((left, right) => dayjs(left.startsAt).valueOf() - dayjs(right.startsAt).valueOf())
+      .filter((slot, index, allSlots) =>
+        index === allSlots.findIndex((candidate) => candidate.startsAt === slot.startsAt)
+      );
+  }
+
+  async function findActiveSpecialistsForService(serviceId) {
+    return prisma.specialist.findMany({
+      where: {
+        active: true,
+        serviceLinks: {
+          some: { serviceId }
+        }
+      },
+      include: {
+        availabilities: true
+      },
+      orderBy: { name: 'asc' }
+    });
+  }
+
+  async function resolveAvailableSpecialistForSlot({ service, preferredSpecialistId, startAt, endAt }) {
+    const specialists = await findActiveSpecialistsForService(service.id);
+    const orderedSpecialists = preferredSpecialistId
+      ? [
+          ...specialists.filter((specialist) => specialist.id === preferredSpecialistId),
+          ...specialists.filter((specialist) => specialist.id !== preferredSpecialistId)
+        ]
+      : specialists;
+
+    for (const specialist of orderedSpecialists) {
+      const availabilityMatches = hasAvailabilityForSlot({
+        specialist,
+        startAt,
+        endAt
+      });
+
+      if (!availabilityMatches) {
+        continue;
+      }
+
+      const overlappingBooking = await findOverlappingBooking({
+        serviceId: service.id,
+        specialistId: specialist.id,
+        startAt: startAt.toDate(),
+        endAt: endAt.toDate()
+      });
+
+      if (!overlappingBooking) {
+        return specialist.id;
+      }
+    }
+
+    throw new AppError('Ese horario ya no esta disponible. Por favor seleccione otra hora.', 409);
+  }
+
+  async function findBlockingBookings({ serviceId, specialistId, dayStart, dayEnd }) {
     return prisma.booking.findMany({
       where: {
-        serviceId,
+        ...(specialistId ? { specialistId } : { serviceId }),
         OR: [
           { status: 'CONFIRMED' },
           {
@@ -481,10 +577,10 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
     });
   }
 
-  async function findOverlappingBooking({ serviceId, startAt, endAt }) {
+  async function findOverlappingBooking({ serviceId, specialistId, startAt, endAt }) {
     return prisma.booking.findFirst({
       where: {
-        serviceId,
+        ...(specialistId ? { specialistId } : { serviceId }),
         OR: [
           { status: 'CONFIRMED' },
           {
@@ -601,6 +697,67 @@ function ensurePendingBookingIsValidOrThrow(booking) {
   if (booking.holdExpiresAt && dayjs(booking.holdExpiresAt).isBefore(dayjs())) {
     throw new AppError('La reserva temporal expiro y el horario fue liberado.', 410);
   }
+}
+
+function buildSlotsForAvailability({ date, durationMinutes, specialist, availability, blockingBookings }) {
+  const slots = [];
+  let cursor = buildChileDateTime(date, formatTimeValue(availability.startTime));
+  const availabilityEnd = buildChileDateTime(date, formatTimeValue(availability.endTime));
+
+  while (cursor.add(durationMinutes, 'minute').valueOf() <= availabilityEnd.valueOf()) {
+    const slotStart = cursor;
+    const slotEnd = cursor.add(durationMinutes, 'minute');
+    const isBlocked = blockingBookings.some((booking) =>
+      dayjs(booking.scheduledAt).isBefore(slotEnd) &&
+      dayjs(booking.endAt).isAfter(slotStart)
+    );
+
+    if (!isBlocked) {
+      slots.push({
+        startsAt: slotStart.format('YYYY-MM-DDTHH:mm:ss'),
+        endsAt: slotEnd.format('YYYY-MM-DDTHH:mm:ss'),
+        specialistId: specialist.id,
+        specialistName: specialist.name
+      });
+    }
+
+    cursor = slotEnd;
+  }
+
+  return slots;
+}
+
+function hasAvailabilityForSlot({ specialist, startAt, endAt }) {
+  const dayOfWeek = startAt.day();
+  return (specialist.availabilities || []).some((availability) => {
+    if (Number(availability.dayOfWeek) !== dayOfWeek) {
+      return false;
+    }
+
+    const date = startAt.format('YYYY-MM-DD');
+    const availabilityStart = buildChileDateTime(date, formatTimeValue(availability.startTime));
+    const availabilityEnd = buildChileDateTime(date, formatTimeValue(availability.endTime));
+
+    return !startAt.isBefore(availabilityStart) && !endAt.isAfter(availabilityEnd);
+  });
+}
+
+function getChileDayOfWeek(date) {
+  return buildChileDateTime(date, '12:00').day();
+}
+
+function buildChileDateTime(date, time) {
+  return dayjs(`${date}T${time}:00`);
+}
+
+function formatTimeValue(value) {
+  if (value instanceof Date) {
+    return `${String(value.getUTCHours()).padStart(2, '0')}:${String(value.getUTCMinutes()).padStart(2, '0')}`;
+  }
+
+  const normalized = String(value || '').trim();
+  const match = normalized.match(/(\d{2}):(\d{2})/);
+  return match ? `${match[1]}:${match[2]}` : '00:00';
 }
 
 function looksLikeIsoDate(value) {

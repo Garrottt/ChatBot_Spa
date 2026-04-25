@@ -50,6 +50,24 @@ function createPrismaStub(overrides = {}) {
       update: async ({ where, data }) => ({ id: 'payment-1', bookingId: where.bookingId, ...data }),
       updateMany: async () => ({ count: 1 }),
       ...(overrides.paymentLink || {})
+    },
+    specialist: {
+      findMany: async () => ([
+        {
+          id: 'specialist-1',
+          name: 'Especialista',
+          active: true,
+          availabilities: [
+            {
+              id: 'availability-1',
+              dayOfWeek: 3,
+              startTime: '09:00:00',
+              endTime: '18:00:00'
+            }
+          ]
+        }
+      ]),
+      ...(overrides.specialist || {})
     }
   };
 }
@@ -85,6 +103,122 @@ test('ensurePaymentLink uses fixed deposit amount instead of service price', asy
   await bookingService.ensurePaymentLink('booking-1');
 
   assert.equal(receivedAmount, 100);
+});
+
+test('quoteAvailability builds slots from the specialist schedule for the selected service', async () => {
+  const bookingService = createBookingService({
+    prisma: createPrismaStub({
+      specialist: {
+        findMany: async () => ([
+          {
+            id: 'specialist-1',
+            name: 'Ana',
+            active: true,
+            availabilities: [
+              {
+                id: 'availability-1',
+                dayOfWeek: 3,
+                startTime: '10:00:00',
+                endTime: '12:00:00'
+              }
+            ]
+          }
+        ])
+      }
+    }),
+    googleCalendar: {
+      getAvailableSlots: async () => {
+        throw new Error('specialist availability should be used instead of generic calendar slots');
+      }
+    },
+    paymentProvider: {},
+    serviceCatalogService: {
+      getServiceById: async () => ({
+        id: 'svc-1',
+        name: 'Masaje relajante',
+        durationMinutes: 60,
+        price: 35000,
+        currency: 'CLP',
+        calendarId: 'cal-1'
+      })
+    }
+  });
+
+  const quote = await bookingService.quoteAvailability({
+    serviceId: 'svc-1',
+    date: '2026-04-29'
+  });
+
+  assert.equal(quote.slots.length, 2);
+  assert.equal(quote.slots[0].specialistId, 'specialist-1');
+  assert.equal(quote.slots[0].startsAt, '2026-04-29T10:00:00');
+  assert.equal(quote.slots[1].startsAt, '2026-04-29T11:00:00');
+});
+
+test('createPendingBooking stores the available specialist for the booked slot', async () => {
+  let createdBookingData = null;
+
+  const bookingService = createBookingService({
+    prisma: createPrismaStub({
+      booking: {
+        findFirst: async () => null,
+        create: async ({ data }) => {
+          createdBookingData = data;
+          return {
+            id: 'booking-1',
+            ...data,
+            service: { id: 'svc-1', name: 'Masaje relajante', durationMinutes: 60, currency: 'CLP' },
+            client: { id: 'client-1', whatsappNumber: '56911111111' },
+            paymentLink: null
+          };
+        }
+      },
+      specialist: {
+        findMany: async () => ([
+          {
+            id: 'specialist-1',
+            name: 'Ana',
+            active: true,
+            availabilities: [
+              {
+                id: 'availability-1',
+                dayOfWeek: 3,
+                startTime: '09:00:00',
+                endTime: '12:00:00'
+              }
+            ]
+          }
+        ])
+      }
+    }),
+    googleCalendar: {},
+    paymentProvider: {},
+    serviceCatalogService: {
+      getServiceById: async () => ({
+        id: 'svc-1',
+        name: 'Masaje relajante',
+        durationMinutes: 60,
+        price: 35000,
+        currency: 'CLP',
+        calendarId: 'cal-1'
+      })
+    }
+  });
+
+  const booking = await bookingService.createPendingBooking({
+    clientId: 'client-1',
+    serviceId: 'svc-1',
+    scheduledAt: '2026-04-29T10:00:00',
+    paymentMethod: 'BANK_TRANSFER',
+    payer: {
+      name: 'Gonza',
+      lastName: 'Perez',
+      formalId: '210931468'
+    }
+  });
+
+  assert.equal(createdBookingData.specialistId, 'specialist-1');
+  assert.equal(booking.specialistId, 'specialist-1');
 });
 
 test('ensurePaymentLink refreshes stale manual links when Mercado Pago is configured', async () => {
