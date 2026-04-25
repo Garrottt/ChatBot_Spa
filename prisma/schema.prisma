@@ -131,7 +131,7 @@ model Booking {
 
 model Specialist {
   id              String              @id
-  userId          String?
+  userId          BigInt?
   name            String
   specialty       String?
   active          Boolean             @default(true)
