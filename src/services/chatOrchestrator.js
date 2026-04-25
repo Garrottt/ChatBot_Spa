@@ -144,6 +144,16 @@ function createChatOrchestrator({
         intentResult
       });
     } catch (error) {
+      logger.error('Conversation routing failed', {
+        conversationId: conversation.id,
+        clientId: client.id,
+        currentIntent: conversation.currentIntent || null,
+        currentStep: conversation.currentStep || null,
+        providerMessageId: message.providerMessageId || null,
+        messageType: message.type || null,
+        error: error.message
+      });
+
       reply = buildReply({
         intent: 'error',
         step: conversation.currentStep || 'error',
