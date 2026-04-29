@@ -571,6 +571,29 @@ test('business info question is answered as faq even if model intent is poor', a
   assert.match(sentMessages[0].text, /FAQ:/);
 });
 
+test('opening hours question answers the schedule instead of starting booking services', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    openAIService: {
+      answerFaq: async () => 'Nuestro horario de atencion es Lunes a Sabado de 09:00 a 20:00.'
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-opening-hours',
+    from: '56911111111',
+    type: 'text',
+    text: 'cual es el horario de atencion?',
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    selectedId: null,
+    media: null
+  });
+
+  assert.equal(sentMessages[0].kind, 'text');
+  assert.match(sentMessages[0].text, /horario de atencion/i);
+  assert.doesNotMatch(sentMessages[0].text, /servicios disponibles/i);
+});
+
 test('invalid date while awaiting date asks the client to choose from the date list instead of crashing', async () => {
   const { orchestrator, sentMessages } = createDependencies({
     client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },

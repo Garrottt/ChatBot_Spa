@@ -19,10 +19,14 @@ function extractJson(content) {
 }
 
 function localIntentClassifier(text) {
-  const normalized = text.toLowerCase();
+  const normalized = normalizeSearchText(text);
 
   if (/(mis reservas|mi reserva|mis horas|mi hora|mi cita|mis citas|tengo .*reserv|tengo .*hora|tengo .*cita|que hora (era|es)|cual es mi hora|cual era mi hora|me olvide.*hora|me olvid[eé].*cita|recuerdame.*hora|revis(a|e).*reserv|puedes revisar.*reserv|ver.*reservas?)/.test(normalized)) {
     return { intent: 'manage_bookings', confidence: 0.9, entities: {} };
+  }
+
+  if (/(horario|horarios|atencion|atienden|abren|cierran|apertura|cierre)/.test(normalized)) {
+    return { intent: 'faq', confidence: 0.9, entities: {} };
   }
 
   if (/(reserv|agendar|agenda|hora|cita|turno|quiero ir|quiero atenderme)/.test(normalized)) {
@@ -45,13 +49,23 @@ function localIntentClassifier(text) {
 }
 
 function resolveFaqAnswer(text) {
-  const normalized = text.toLowerCase();
-  const faq = faqKnowledgeBase.find((item) =>
-    normalized.includes(item.topic) ||
-    (item.keywords || []).some((keyword) => normalized.includes(keyword))
-  );
-
+  const faq = resolveFaq(text);
   return faq?.answer || null;
+}
+
+function normalizeSearchText(text) {
+  return String(text || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function resolveFaq(text) {
+  const normalized = normalizeSearchText(text);
+  return faqKnowledgeBase.find((item) =>
+    normalized.includes(item.topic) ||
+    (item.keywords || []).some((keyword) => normalized.includes(normalizeSearchText(keyword)))
+  );
 }
 
 function normalizeIntentResult(rawResult, text) {
@@ -106,10 +120,15 @@ function createOpenAIService() {
   }
 
   async function answerFaq(question, services) {
-    const knownAnswer = resolveFaqAnswer(question);
+    const knownFaq = resolveFaq(question);
+    const knownAnswer = knownFaq?.answer || null;
     const serviceLines = services
       .map((service) => `${service.name}: ${service.description}. Precio ${service.price} ${service.currency}. Duracion ${service.durationMinutes} min.`)
       .join('\n');
+
+    if (knownAnswer && knownFaq.topic !== 'informacion_general') {
+      return knownAnswer;
+    }
 
     if (!client) {
       return knownAnswer || `Puedo ayudarle con informacion del spa y reservas. Servicios disponibles:\n${serviceLines}`;

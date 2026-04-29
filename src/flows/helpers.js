@@ -55,6 +55,13 @@ function parseSelectedAction(selectedId) {
   };
 }
 
+function normalizeSearchText(text) {
+  return String(text || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
 async function resolveServiceSelection({ selectedAction, text, serviceCatalogService }) {
   if (selectedAction?.type === 'service') {
     return serviceCatalogService.getServiceById(selectedAction.value);
@@ -64,7 +71,11 @@ async function resolveServiceSelection({ selectedAction, text, serviceCatalogSer
 }
 
 function asksForBusinessInfo(text) {
-  return /(horario|ubicacion|ubicaci\u00F3n|direccion|direcci\u00F3n|donde|d\u00F3nde|precio|precios|servicio|servicios|masaje|masajes|facial|faciales|limpieza|lifting|pestanas|depilacion|unas|u\u00F1as|tratamiento|tratamientos|nombre|spa|instagram|telefono|tel\u00E9fono|redes|estacionamiento|pago|tarjeta)/.test(String(text || '').toLowerCase());
+  return /(horario|atencion|atienden|abren|cierran|ubicacion|direccion|donde|precio|precios|servicio|servicios|masaje|masajes|facial|faciales|limpieza|lifting|pestanas|depilacion|unas|tratamiento|tratamientos|nombre|spa|instagram|telefono|redes|estacionamiento|pago|tarjeta)/.test(normalizeSearchText(text));
+}
+
+function asksForOpeningHours(text) {
+  return /(horario|horarios|atencion|atienden|abren|cierran|apertura|cierre)/.test(normalizeSearchText(text));
 }
 
 function wantsMainMenu(text) {
@@ -104,6 +115,10 @@ function inferDeterministicIntent(text, matchedService, selectedAction) {
 
   if (asksForBookingStatus(text)) {
     return 'manage_bookings';
+  }
+
+  if (asksForOpeningHours(text)) {
+    return 'faq';
   }
 
   if (/(reserv|agendar|agenda|hora|cita|turno)/.test(text)) {
@@ -146,6 +161,7 @@ function inferPaymentMethod(text, selectedAction) {
 
 module.exports = {
   asksForBusinessInfo,
+  asksForOpeningHours,
   asksForBookingStatus,
   asksForTimeRemaining,
   buildReply,
