@@ -549,10 +549,38 @@ test('date selection explains clearly when no schedules are available for that d
     media: null
   });
 
-  assert.equal(sentMessages[0].kind, 'list');
+  assert.equal(sentMessages[0].kind, 'buttons');
   assert.match(sentMessages[0].bodyText, /(no hay horarios disponibles|no quedan horarios disponibles)/i);
-  assert.match(sentMessages[0].bodyText, /seleccione otra fecha/i);
+  assert.match(sentMessages[0].bodyText, /(otras fechas|otra fecha|cambiar de servicio)/i);
+  assert.equal(sentMessages[0].buttons[0].id, 'retrydates:Masaje de Espalda');
+  assert.equal(sentMessages[0].buttons[1].id, 'menu:book');
   assert.equal(conversation.currentStep, 'awaiting_date');
+});
+
+test('retry dates button reopens the available dates list for the same booking flow', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'booking',
+      currentStep: 'awaiting_date',
+      collectedData: { serviceId: 'svc-1' },
+      lastBookingId: null
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-retry-dates',
+    from: '56911111111',
+    type: 'interactive',
+    text: 'Ver fechas',
+    selectedId: 'retrydates:Masaje de Espalda',
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    media: null
+  });
+
+  assert.equal(sentMessages[0].kind, 'list');
+  assert.match(sentMessages[0].bodyText, /elija el dia que prefiera/i);
 });
 
 test('valid proof image confirms the booking after payment validation', async () => {

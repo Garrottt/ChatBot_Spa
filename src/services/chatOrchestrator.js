@@ -220,6 +220,10 @@ function createChatOrchestrator({
       return bookingFlow.startBookingFlow(client, {});
     }
 
+    if (selectedAction?.type === 'retrydates') {
+      return bookingFlow.buildDatePrompt(collectedData);
+    }
+
     if (selectedAction?.type === 'menu' && selectedAction.value === 'services') {
       return servicesFlow.buildServiceListReply(collectedData);
     }

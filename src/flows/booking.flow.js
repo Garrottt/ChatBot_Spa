@@ -49,6 +49,17 @@ function buildUnavailableServiceOutbound(serviceName) {
   };
 }
 
+function buildNoSlotsOutbound(serviceName, bodyText) {
+  return {
+    kind: 'buttons',
+    bodyText,
+    buttons: [
+      { id: `retrydates:${serviceName}`, title: 'Ver fechas' },
+      { id: 'menu:book', title: 'Otro servicio' }
+    ]
+  };
+}
+
 function parseSlotSelection(value) {
   const parts = String(value || '').split(':');
 
@@ -163,7 +174,10 @@ function createBookingFlow({
           ...collectedData,
           serviceId
         },
-        outbound: buildDateListOutbound(`${noSlotsText}\n\nSeleccione otra fecha para continuar.`)
+        outbound: buildNoSlotsOutbound(
+          quote.service.name,
+          `${noSlotsText}\n\nPuede revisar otras fechas o cambiar de servicio.`
+        )
       });
     }
 
