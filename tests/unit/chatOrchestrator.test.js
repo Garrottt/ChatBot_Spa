@@ -481,6 +481,44 @@ test('service selection continues booking flow even when coming from consultatio
   assert.match(sentMessages[0].bodyText, /dia/i);
 });
 
+test('date selection explains when the service has no assigned specialist and offers buttons to choose another service', async () => {
+  const { orchestrator, sentMessages, conversation } = createDependencies({
+    client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'booking',
+      currentStep: 'awaiting_date',
+      collectedData: { serviceId: 'svc-1' },
+      lastBookingId: null
+    },
+    bookingService: {
+      quoteAvailability: async () => ({
+        service: { id: 'svc-1', name: 'Masaje de Espalda', durationMinutes: 60, price: 1000, currency: 'CLP' },
+        slots: [],
+        unavailableReason: 'NO_SPECIALISTS'
+      })
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-no-specialist',
+    from: '56911111111',
+    type: 'interactive',
+    text: 'Jueves 30 Abril',
+    selectedId: 'date:2026-04-30',
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    media: null
+  });
+
+  assert.equal(sentMessages[0].kind, 'buttons');
+  assert.match(sentMessages[0].bodyText, /no tiene un especialista asignado/i);
+  assert.match(sentMessages[0].bodyText, /no se encuentra disponible/i);
+  assert.equal(sentMessages[0].buttons[0].id, 'menu:book');
+  assert.equal(sentMessages[0].buttons[1].id, 'menu:main');
+  assert.equal(conversation.currentStep, 'awaiting_service');
+});
+
 test('valid proof image confirms the booking after payment validation', async () => {
   const { orchestrator, sentMessages } = createDependencies({
     client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },

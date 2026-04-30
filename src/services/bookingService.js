@@ -18,9 +18,31 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
     await expirePendingBookings();
 
     const service = await serviceCatalogService.getServiceById(serviceId);
+    const specialists = await findActiveSpecialistsForService(service.id);
+
+    if (!specialists.length) {
+      logger.warn('Service has no active specialists assigned for booking', {
+        serviceId: service.id,
+        serviceName: service.name
+      });
+
+      return {
+        service: {
+          id: service.id,
+          name: service.name,
+          durationMinutes: service.durationMinutes,
+          price: service.price,
+          currency: service.currency
+        },
+        slots: [],
+        unavailableReason: 'NO_SPECIALISTS'
+      };
+    }
+
     const specialistSlots = await buildSpecialistAvailabilitySlots({
       service,
-      date: normalizedDate
+      date: normalizedDate,
+      specialists
     });
     const now = dayjs();
     const availableSlots = specialistSlots.filter((slot) => {
@@ -41,7 +63,8 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
         price: service.price,
         currency: service.currency
       },
-      slots: availableSlots
+      slots: availableSlots,
+      unavailableReason: null
     };
   }
 
@@ -453,10 +476,12 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
     });
   }
 
-  async function buildSpecialistAvailabilitySlots({ service, date }) {
-    const specialists = await findActiveSpecialistsForService(service.id);
+  async function buildSpecialistAvailabilitySlots({ service, date, specialists = null }) {
+    const activeSpecialists = Array.isArray(specialists)
+      ? specialists
+      : await findActiveSpecialistsForService(service.id);
 
-    if (!specialists.length) {
+    if (!activeSpecialists.length) {
       logger.warn('No active specialists found for service availability', {
         serviceId: service.id,
         serviceName: service.name
@@ -469,7 +494,7 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
     const dayEnd = buildChileDateTime(date, '23:59').toDate();
     const slots = [];
 
-    for (const specialist of specialists) {
+    for (const specialist of activeSpecialists) {
       const availabilities = (specialist.availabilities || []).filter((availability) =>
         Number(availability.dayOfWeek) === dayOfWeek
       );

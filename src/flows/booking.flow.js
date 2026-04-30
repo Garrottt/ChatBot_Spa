@@ -38,6 +38,17 @@ function buildDateListOutbound() {
   };
 }
 
+function buildUnavailableServiceOutbound(serviceName) {
+  return {
+    kind: 'buttons',
+    bodyText: `Por el momento ${serviceName} no tiene un especialista asignado, por lo tanto no se encuentra disponible.\n\nPor favor elija otro servicio para continuar.`,
+    buttons: [
+      { id: 'menu:book', title: 'Otro servicio' },
+      { id: 'menu:main', title: 'Volver' }
+    ]
+  };
+}
+
 function parseSlotSelection(value) {
   const parts = String(value || '').split(':');
 
@@ -120,6 +131,17 @@ function createBookingFlow({
       serviceId,
       date: normalizedDate
     });
+
+    if (quote.unavailableReason === 'NO_SPECIALISTS') {
+      const unavailableText = `Por el momento ${quote.service.name} no tiene un especialista asignado, por lo tanto no se encuentra disponible.\n\nPor favor elija otro servicio para continuar.`;
+      return buildReply({
+        intent: 'booking',
+        step: 'awaiting_service',
+        text: unavailableText,
+        collectedData: {},
+        outbound: buildUnavailableServiceOutbound(quote.service.name)
+      });
+    }
 
     const slotRows = quote.slots.slice(0, 10).map((slot) => ({
       id: ['slot', normalizeSlotValue(slot.startsAt), slot.specialistId].filter(Boolean).join(':'),
