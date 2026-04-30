@@ -68,6 +68,47 @@ function resolveFaq(text) {
   );
 }
 
+function formatServicePrice(amount, currency = 'CLP') {
+  return `$${Number(amount || 0).toLocaleString('es-CL')} ${currency}`;
+}
+
+function findMatchingService(question, services) {
+  const normalizedQuestion = normalizeSearchText(question);
+
+  return services.find((service) => {
+    const normalizedName = normalizeSearchText(service.name);
+    const normalizedCode = normalizeSearchText(service.code || '');
+
+    return normalizedQuestion.includes(normalizedName) || (normalizedCode && normalizedQuestion.includes(normalizedCode));
+  }) || null;
+}
+
+function asksForServiceCatalog(question) {
+  const normalized = normalizeSearchText(question);
+  return /(que servicios|cuales servicios|servicios disponibles|que tratamientos|cuales tratamientos|precios|valores|catalogo|catalogo de servicios)/.test(normalized);
+}
+
+function buildDeterministicServiceAnswer(question, services) {
+  const matchedService = findMatchingService(question, services);
+  if (matchedService) {
+    const descriptionBlock = matchedService.description
+      ? `${matchedService.description}\n`
+      : '';
+
+    return `✨ ${matchedService.name}\n${descriptionBlock}⏱️ Duracion: ${matchedService.durationMinutes} minutos\n💰 Precio: ${formatServicePrice(matchedService.price, matchedService.currency)}`;
+  }
+
+  if (!asksForServiceCatalog(question)) {
+    return null;
+  }
+
+  const catalog = services
+    .map((service) => `✨ ${service.name}: ${formatServicePrice(service.price, service.currency)} - ${service.durationMinutes} min.`)
+    .join('\n');
+
+  return `Estos son nuestros servicios disponibles:\n\n${catalog}`;
+}
+
 function normalizeIntentResult(rawResult, text) {
   const fallback = localIntentClassifier(text);
 
@@ -122,12 +163,17 @@ function createOpenAIService() {
   async function answerFaq(question, services) {
     const knownFaq = resolveFaq(question);
     const knownAnswer = knownFaq?.answer || null;
+    const deterministicServiceAnswer = buildDeterministicServiceAnswer(question, services);
     const serviceLines = services
-      .map((service) => `${service.name}: ${service.description}. Precio ${service.price} ${service.currency}. Duracion ${service.durationMinutes} min.`)
+      .map((service) => `${service.name}: ${service.description}. Precio exacto ${formatServicePrice(service.price, service.currency)}. Duracion ${service.durationMinutes} min.`)
       .join('\n');
 
     if (knownAnswer && knownFaq.topic !== 'informacion_general') {
       return knownAnswer;
+    }
+
+    if (deterministicServiceAnswer) {
+      return deterministicServiceAnswer;
     }
 
     if (!client) {
