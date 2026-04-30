@@ -721,6 +721,37 @@ test('consultation about services answers conversationally instead of sending th
   assert.match(sentMessages[0].text, /Conversacion FAQ:/);
 });
 
+test('service consultation answer includes buttons for another question and booking', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'faq',
+      currentStep: 'faq_context',
+      collectedData: { serviceId: 'svc-1' },
+      lastBookingId: null
+    },
+    openAIService: {
+      answerFaq: async () => '✨ Limpieza facial profunda\n⏱️ Duracion: 75 minutos\n💰 Precio: $197 CLP'
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-service-faq-buttons',
+    from: '56911111111',
+    type: 'text',
+    text: 'cual es el valor?',
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    selectedId: null,
+    media: null
+  });
+
+  assert.equal(sentMessages[0].kind, 'buttons');
+  assert.match(sentMessages[0].bodyText, /Masaje relajante/i);
+  assert.equal(sentMessages[0].buttons[0].id, 'bookservice:svc-1');
+  assert.equal(sentMessages[0].buttons[1].id, 'askservice:svc-1');
+});
+
 test('consultation switches to guided booking flow when the client asks to reserve', async () => {
   const { orchestrator, sentMessages } = createDependencies({
     conversation: {

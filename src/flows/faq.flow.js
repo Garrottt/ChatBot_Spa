@@ -16,12 +16,23 @@ function createFaqFlow({ openAIService, serviceCatalogService }) {
       ? services.find((item) => item.id === collectedData.serviceId) || null
       : null;
     const text = await openAIService.answerFaq(question, services, { service });
+    const outbound = service
+      ? {
+          kind: 'buttons',
+          bodyText: `¿Que desea hacer con ${service.name}?`,
+          buttons: [
+            { id: `bookservice:${service.id}`, title: 'Reservar' },
+            { id: `askservice:${service.id}`, title: 'Otra consulta' }
+          ]
+        }
+      : undefined;
 
     return buildReply({
       intent: 'faq',
       step: 'answered',
       text,
-      collectedData
+      collectedData,
+      outbound
     });
   }
 
