@@ -250,6 +250,10 @@ Instrucciones:
     currency = 'CLP',
     expectedPayerName,
     expectedFormalId,
+    expectedRecipientName,
+    expectedRecipientFormalId,
+    expectedRecipientAccountNumber,
+    expectedRecipientBank,
     paymentWindowStartsAt,
     paymentWindowEndsAt
   }) {
@@ -260,6 +264,10 @@ Instrucciones:
         detectedAmount: null,
         payerName: null,
         payerFormalId: null,
+        recipientName: null,
+        recipientFormalId: null,
+        recipientAccountNumber: null,
+        recipientBank: null,
         paymentTimestamp: null,
         transactionId: null,
         confidence: 0
@@ -273,6 +281,10 @@ Instrucciones:
         detectedAmount: null,
         payerName: null,
         payerFormalId: null,
+        recipientName: null,
+        recipientFormalId: null,
+        recipientAccountNumber: null,
+        recipientBank: null,
         paymentTimestamp: null,
         transactionId: null,
         confidence: 0
@@ -285,7 +297,7 @@ Instrucciones:
         input: [
           {
             role: 'system',
-            content: 'Eres un extractor y validador estricto de comprobantes de pago. Responde SOLO JSON con forma {"isValid":boolean,"reason":"","detectedAmount":number|null,"payerName":string|null,"payerFormalId":string|null,"paymentTimestamp":string|null,"transactionId":string|null,"confidence":0}.'
+            content: 'Eres un extractor y validador estricto de comprobantes de pago. Responde SOLO JSON con forma {"isValid":boolean,"reason":"","detectedAmount":number|null,"payerName":string|null,"payerFormalId":string|null,"recipientName":string|null,"recipientFormalId":string|null,"recipientAccountNumber":string|null,"recipientBank":string|null,"paymentTimestamp":string|null,"transactionId":string|null,"confidence":0}.'
           },
           {
             role: 'user',
@@ -301,6 +313,10 @@ REGLA 1 - isValid:
 REGLA 2 - Extraccion de datos:
 - payerName: nombre del pagador o titular que aparece en el comprobante. Si hay varios nombres, conserva el nombre completo tal como aparece.
 - payerFormalId: RUT o identificador si aparece visiblemente en la imagen. Si deberia estar y no aparece, devuelve null y explica el problema en reason.
+- recipientName: nombre del destinatario o titular de la cuenta destino que aparece en el comprobante.
+- recipientFormalId: RUT o identificador del destinatario si aparece visiblemente en la imagen.
+- recipientAccountNumber: numero de cuenta destino visible en el comprobante.
+- recipientBank: banco o institucion financiera del destinatario.
 - detectedAmount: monto numerico visible (sin simbolos). Si no coincide con el esperado, extraelo igual y marca isValid=false.
 - paymentTimestamp: fecha y hora en formato ISO 8601 con offset de zona horaria. Para comprobantes chilenos con "Fecha" y "Hora" por separado, combinalas con el offset -04:00.
 - transactionId: numero de solicitud, folio, numero de operacion, numero de transaccion, ID de operacion o cualquier identificador unico visible. Si no aparece ninguno, devuelve null.
@@ -309,6 +325,10 @@ REGLA 2 - Extraccion de datos:
 Datos de referencia para validar compatibilidad:
 - Pagador esperado: ${expectedPayerName || 'No disponible'}
 - RUT esperado: ${expectedFormalId || 'No disponible'}
+- Destinatario esperado: ${expectedRecipientName || 'No disponible'}
+- RUT destinatario esperado: ${expectedRecipientFormalId || 'No disponible'}
+- Cuenta destino esperada: ${expectedRecipientAccountNumber || 'No disponible'}
+- Banco destino esperado: ${expectedRecipientBank || 'No disponible'}
 - Monto esperado: ${amount || 'No disponible'} ${currency}
 - Ventana de pago: desde ${paymentWindowStartsAt || 'No disponible'} hasta ${paymentWindowEndsAt || 'No disponible'}`
               },
@@ -329,6 +349,10 @@ Datos de referencia para validar compatibilidad:
           detectedAmount: null,
           payerName: null,
           payerFormalId: null,
+          recipientName: null,
+          recipientFormalId: null,
+          recipientAccountNumber: null,
+          recipientBank: null,
           paymentTimestamp: null,
           transactionId: null,
           confidence: 0
@@ -341,6 +365,10 @@ Datos de referencia para validar compatibilidad:
         detectedAmount: typeof parsed.detectedAmount === 'number' ? parsed.detectedAmount : null,
         payerName: typeof parsed.payerName === 'string' ? parsed.payerName : null,
         payerFormalId: typeof parsed.payerFormalId === 'string' ? parsed.payerFormalId : null,
+        recipientName: typeof parsed.recipientName === 'string' ? parsed.recipientName : null,
+        recipientFormalId: typeof parsed.recipientFormalId === 'string' ? parsed.recipientFormalId : null,
+        recipientAccountNumber: typeof parsed.recipientAccountNumber === 'string' ? parsed.recipientAccountNumber : null,
+        recipientBank: typeof parsed.recipientBank === 'string' ? parsed.recipientBank : null,
         paymentTimestamp: typeof parsed.paymentTimestamp === 'string' ? parsed.paymentTimestamp : null,
         transactionId: typeof parsed.transactionId === 'string' ? parsed.transactionId.trim() : null,
         confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0
@@ -353,6 +381,10 @@ Datos de referencia para validar compatibilidad:
         detectedAmount: null,
         payerName: null,
         payerFormalId: null,
+        recipientName: null,
+        recipientFormalId: null,
+        recipientAccountNumber: null,
+        recipientBank: null,
         paymentTimestamp: null,
         transactionId: null,
         confidence: 0

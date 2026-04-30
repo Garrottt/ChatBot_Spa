@@ -1,5 +1,8 @@
 const dayjs = require('dayjs');
+const utc = require('dayjs/plugin/utc');
+const timezone = require('dayjs/plugin/timezone');
 
+const { env } = require('../config/env');
 const { AppError } = require('../lib/errors');
 const { logger } = require('../lib/logger');
 const { createBookingFlow } = require('../flows/booking.flow');
@@ -22,6 +25,9 @@ const {
 } = require('../flows/helpers');
 const { createServicesFlow } = require('../flows/services.flow');
 const { createWelcomeFlow } = require('../flows/welcome.flow');
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 function createChatOrchestrator({
   openAIService,
@@ -276,11 +282,11 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'cancel_booking',
         step: 'awaiting_cancel_confirmation',
-        text: `⚠️ Esta a punto de cancelar su cita.\n\nServicio: ${selectedBooking.service.name}\nFecha: ${dayjs(selectedBooking.scheduledAt).format('YYYY-MM-DD HH:mm')}\n\n¿Desea confirmar la cancelacion?`,
+        text: `⚠️ Esta a punto de cancelar su cita.\n\nServicio: ${selectedBooking.service.name}\nFecha: ${formatBookingDateTime(selectedBooking.scheduledAt)}\n\n¿Desea confirmar la cancelacion?`,
         collectedData,
         outbound: {
           kind: 'buttons',
-          bodyText: `⚠️ Confirmar cancelacion de ${selectedBooking.service.name}\n${dayjs(selectedBooking.scheduledAt).format('YYYY-MM-DD HH:mm')}`,
+          bodyText: `⚠️ Confirmar cancelacion de ${selectedBooking.service.name}\n${formatBookingDateTime(selectedBooking.scheduledAt)}`,
           buttons: [
             { id: `cancelconfirm:${selectedBooking.id}`, title: 'Si, cancelar' },
             { id: 'menu:main', title: 'Volver' }
@@ -298,7 +304,7 @@ function createChatOrchestrator({
       const cancelledBooking = await bookingService.cancelBooking(selectedAction.value);
 
       const wasPaid = cancelledBooking.paymentStatus === 'APPROVED';
-      const baseText = `✅ Su cita de ${cancelledBooking.service.name} para el ${dayjs(cancelledBooking.scheduledAt).format('YYYY-MM-DD HH:mm')} fue cancelada correctamente.`;
+      const baseText = `✅ Su cita de ${cancelledBooking.service.name} para el ${formatBookingDateTime(cancelledBooking.scheduledAt)} fue cancelada correctamente.`;
       const refundNote = wasPaid
         ? `\n\nComo ya habia realizado un abono para esta reserva, el equipo del spa se pondra en contacto con usted a la brevedad para solicitar sus datos bancarios y gestionar la devolucion del monto abonado.`
         : '';
@@ -698,6 +704,7 @@ function createChatOrchestrator({
       caption: message.media.caption || ''
     };
     const booking = await bookingService.recordPaymentProofSubmission(bookingId, proofMetadata);
+    const expectedTransferRecipient = parseTransferRecipientDetails(env.spaTransferDetails);
     const validation = await openAIService.validatePaymentProof({
       imageBuffer: downloadedMedia.buffer,
       mimeType: downloadedMedia.mimeType,
@@ -705,6 +712,10 @@ function createChatOrchestrator({
       currency: booking.service.currency,
       expectedPayerName: getExpectedPayerName(booking),
       expectedFormalId: booking.payerFormalId || booking.client.formalId,
+      expectedRecipientName: expectedTransferRecipient.name,
+      expectedRecipientFormalId: expectedTransferRecipient.formalId,
+      expectedRecipientAccountNumber: expectedTransferRecipient.accountNumber,
+      expectedRecipientBank: expectedTransferRecipient.bank,
       paymentWindowStartsAt: dayjs(booking.createdAt).toISOString(),
       paymentWindowEndsAt: booking.holdExpiresAt ? dayjs(booking.holdExpiresAt).toISOString() : null
     });
@@ -797,7 +808,8 @@ function createChatOrchestrator({
       ? totalPaidByClient - confirmedBooking.depositAmount
       : 0;
 
-    const baseFallback = `Su cita para ${confirmedBooking.service.name} quedo confirmada para el ${dayjs(confirmedBooking.scheduledAt).format('YYYY-MM-DD HH:mm')}. Su pago fue validado correctamente y ya dejamos su hora reservada.`;
+    const scheduledAtLocal = formatBookingDateTime(confirmedBooking.scheduledAt);
+    const baseFallback = `Su cita para ${confirmedBooking.service.name} quedo confirmada para el ${scheduledAtLocal}. Su pago fue validado correctamente y ya dejamos su hora reservada.`;
     const overpaymentNote = overpaidAmount > 0
       ? ` Notamos que en total abono ${totalPaidByClient} ${confirmedBooking.service.currency} (abono requerido: ${confirmedBooking.depositAmount} ${confirmedBooking.service.currency}). Conserve sus comprobantes: al llegar al spa le descontaremos los ${overpaidAmount} ${confirmedBooking.service.currency} adicionales del pago final.`
       : (partialAmountPaid > 0 ? ` La suma de sus abonos cubre el total requerido.` : '');
@@ -807,7 +819,7 @@ function createChatOrchestrator({
       fallbackMessage,
       bookingId: confirmedBooking.id,
       serviceName: confirmedBooking.service.name,
-      scheduledAt: confirmedBooking.scheduledAt,
+      scheduledAt: scheduledAtLocal,
       ...(overpaidAmount > 0 && {
         overpaymentDetected: true,
         totalPaid: totalPaidByClient,
@@ -886,7 +898,7 @@ function createChatOrchestrator({
 
     if (upcomingBookings.length === 1) {
       const booking = upcomingBookings[0];
-      const scheduledAt = dayjs(booking.scheduledAt).format('YYYY-MM-DD HH:mm');
+      const scheduledAt = formatBookingDateTime(booking.scheduledAt);
 
       return buildReply({
         intent: 'manage_bookings',
@@ -929,7 +941,7 @@ function createChatOrchestrator({
 
     const summary = upcomingBookings
       .slice(0, 10)
-      .map((booking, index) => `${index + 1}. ${booking.service.name} - ${dayjs(booking.scheduledAt).format('YYYY-MM-DD HH:mm')}`)
+      .map((booking, index) => `${index + 1}. ${booking.service.name} - ${formatBookingDateTime(booking.scheduledAt)}`)
       .join('\n');
 
     return buildReply({
@@ -965,11 +977,11 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'cancel_booking',
         step: 'awaiting_cancel_confirmation',
-        text: `⚠️ Encontre una reserva.\n\nServicio: ${booking.service.name}\nFecha: ${dayjs(booking.scheduledAt).format('YYYY-MM-DD HH:mm')}\n\n¿Desea cancelarla?`,
+        text: `⚠️ Encontre una reserva.\n\nServicio: ${booking.service.name}\nFecha: ${formatBookingDateTime(booking.scheduledAt)}\n\n¿Desea cancelarla?`,
         collectedData: {},
         outbound: {
           kind: 'buttons',
-          bodyText: `⚠️ Reserva encontrada\n${booking.service.name}\n${dayjs(booking.scheduledAt).format('YYYY-MM-DD HH:mm')}`,
+          bodyText: `⚠️ Reserva encontrada\n${booking.service.name}\n${formatBookingDateTime(booking.scheduledAt)}`,
           buttons: [
             { id: `cancelconfirm:${booking.id}`, title: 'Si, cancelar' },
             { id: 'menu:main', title: 'Volver' }
@@ -993,7 +1005,7 @@ function createChatOrchestrator({
             rows: upcomingBookings.slice(0, 10).map((booking) => ({
               id: `cancelbooking:${booking.id}`,
               title: booking.service.name,
-              description: dayjs(booking.scheduledAt).format('YYYY-MM-DD HH:mm')
+              description: formatBookingDateTime(booking.scheduledAt)
             }))
           }
         ]
@@ -1065,6 +1077,29 @@ function resolvePaymentProofRejectionReason(booking, validation) {
     return 'El RUT o identificador del comprobante no coincide con el registrado en la reserva.';
   }
 
+  const expectedRecipient = parseTransferRecipientDetails(env.spaTransferDetails);
+  const detectedRecipientAccountNumber = normalizeAccountNumber(validation.recipientAccountNumber);
+  if (expectedRecipient.accountNumber && detectedRecipientAccountNumber && expectedRecipient.accountNumber !== detectedRecipientAccountNumber) {
+    return 'La cuenta destino del comprobante no coincide con la cuenta bancaria configurada para recibir el abono.';
+  }
+
+  const detectedRecipientName = normalizePersonName(validation.recipientName);
+  if (expectedRecipient.name && detectedRecipientName && !personNameMatches(expectedRecipient.name, detectedRecipientName)) {
+    return 'El destinatario del comprobante no coincide con el titular configurado para recibir el abono.';
+  }
+
+  const expectedRecipientFormalId = normalizeFormalId(expectedRecipient.formalId);
+  const detectedRecipientFormalId = normalizeFormalId(validation.recipientFormalId);
+  if (expectedRecipientFormalId && detectedRecipientFormalId && expectedRecipientFormalId !== detectedRecipientFormalId) {
+    return 'El RUT del destinatario del comprobante no coincide con el configurado para recibir el abono.';
+  }
+
+  const expectedRecipientBank = normalizeSearchText(expectedRecipient.bank);
+  const detectedRecipientBank = normalizeSearchText(validation.recipientBank);
+  if (expectedRecipientBank && detectedRecipientBank && expectedRecipientBank !== detectedRecipientBank) {
+    return 'El banco destino del comprobante no coincide con el configurado para recibir el abono.';
+  }
+
   const paymentTimestamp = parsePaymentTimestamp(validation.paymentTimestamp);
   if (!paymentTimestamp || !paymentTimestamp.isValid()) {
     return 'No se pudo validar la fecha y hora del pago del comprobante.';
@@ -1133,6 +1168,20 @@ function normalizeFormalId(value) {
   return String(value || '').toUpperCase().replace(/[^0-9K]/g, '');
 }
 
+function normalizeAccountNumber(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function normalizeSearchText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function parsePaymentTimestamp(value) {
   if (!value) {
     return null;
@@ -1174,6 +1223,8 @@ function hasUsableProofExtraction(validation) {
   return Boolean(
     typeof validation?.detectedAmount === 'number' ||
     validation?.payerName ||
+    validation?.recipientName ||
+    validation?.recipientAccountNumber ||
     validation?.paymentTimestamp ||
     validation?.transactionId
   );
@@ -1191,4 +1242,44 @@ function preserveSystemCollectedData(existingData, nextData) {
     ...next,
     chatwoot: existing.chatwoot
   };
+}
+
+function formatBookingDateTime(value) {
+  return dayjs(value).tz(env.googleTimezone).format('YYYY-MM-DD HH:mm');
+}
+
+function parseTransferRecipientDetails(transferDetails) {
+  const text = String(transferDetails || '');
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const details = {
+    name: '',
+    formalId: '',
+    bank: '',
+    accountNumber: ''
+  };
+
+  for (const line of lines) {
+    const normalizedLine = normalizeSearchText(line);
+
+    if (!details.name && normalizedLine.startsWith('titular ')) {
+      details.name = normalizePersonName(line.split(':').slice(1).join(':').trim());
+      continue;
+    }
+
+    if (!details.formalId && normalizedLine.startsWith('rut ')) {
+      details.formalId = line.split(':').slice(1).join(':').trim();
+      continue;
+    }
+
+    if (!details.bank && normalizedLine.startsWith('banco ')) {
+      details.bank = line.split(':').slice(1).join(':').trim();
+      continue;
+    }
+
+    if (!details.accountNumber && normalizedLine.startsWith('numero de cuenta ')) {
+      details.accountNumber = normalizeAccountNumber(line.split(':').slice(1).join(':').trim());
+    }
+  }
+
+  return details;
 }

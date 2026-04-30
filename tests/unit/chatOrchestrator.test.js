@@ -550,6 +550,66 @@ test('valid proof image confirms the booking after payment validation', async ()
   assert.match(sentMessages[0].bodyText, /quedo confirmada/i);
 });
 
+test('booking confirmation message formats the confirmed schedule in America/Santiago timezone', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'booking',
+      currentStep: 'awaiting_payment_proof',
+      collectedData: { bookingId: 'booking-1', serviceId: 'svc-1', date: '2026-04-30', time: '18:00' },
+      lastBookingId: 'booking-1'
+    },
+    bookingService: {
+      recordPaymentProofSubmission: async () => ({
+        id: 'booking-1',
+        depositAmount: 100,
+        createdAt: '2026-04-30T21:00:00.000Z',
+        holdExpiresAt: '2026-04-30T21:10:00.000Z',
+        service: { name: 'Masaje de Espalda', currency: 'CLP' },
+        client: { name: 'Gonza', lastName: 'Perez', formalId: '210931468' }
+      }),
+      confirmPendingBooking: async () => ({
+        id: 'booking-1',
+        depositAmount: 100,
+        scheduledAt: '2026-04-30T22:00:00.000Z',
+        service: { name: 'Masaje de Espalda', currency: 'CLP' }
+      })
+    },
+    openAIService: {
+      craftBookingReply: async ({ fallbackMessage }) => fallbackMessage,
+      validatePaymentProof: async () => ({
+        isValid: true,
+        reason: 'ok',
+        detectedAmount: 100,
+        payerName: 'Gonza Perez',
+        payerFormalId: '210931468',
+        paymentTimestamp: '2026-04-30T17:05:00-04:00',
+        confidence: 0.95
+      })
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-proof-local-time',
+    from: '56911111111',
+    type: 'image',
+    text: '',
+    selectedId: null,
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    media: {
+      id: 'media-proof-local-time',
+      mimeType: 'image/png',
+      caption: ''
+    }
+  });
+
+  assert.equal(sentMessages[0].kind, 'buttons');
+  assert.match(sentMessages[0].bodyText, /2026-04-30 18:00/);
+  assert.doesNotMatch(sentMessages[0].bodyText, /2026-04-30 22:00/);
+});
+
 test('invalid proof image asks the client to resend the receipt', async () => {
   const { orchestrator, sentMessages } = createDependencies({
     client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
@@ -1085,7 +1145,7 @@ test('booking status question answers with the next reservation instead of sendi
       findUpcomingBookingsForClient: async () => ([
         {
           id: 'booking-1',
-          scheduledAt: '2026-04-15T10:00:00.000Z',
+          scheduledAt: '2026-04-30T22:00:00.000Z',
           service: { name: 'Masaje relajante' }
         }
       ])
@@ -1106,6 +1166,7 @@ test('booking status question answers with the next reservation instead of sendi
   assert.equal(sentMessages[0].kind, 'buttons');
   assert.match(sentMessages[0].bodyText, /Su proxima reserva/i);
   assert.match(sentMessages[0].bodyText, /Masaje relajante/i);
+  assert.match(sentMessages[0].bodyText, /2026-04-30 18:00/);
   assert.doesNotMatch(sentMessages[0].bodyText, /menu principal/i);
 });
 
@@ -1168,6 +1229,53 @@ test('proof image is rejected when the payer name does not match the reservation
 
   assert.equal(sentMessages[0].kind, 'text');
   assert.match(sentMessages[0].text, /nombre del comprobante no coincide/i);
+});
+
+test('proof image is rejected when the destination account does not match the spa transfer account', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'booking',
+      currentStep: 'awaiting_payment_proof',
+      collectedData: { bookingId: 'booking-1', serviceId: 'svc-1', date: '2026-04-30', time: '18:00' },
+      lastBookingId: 'booking-1'
+    },
+    openAIService: {
+      validatePaymentProof: async () => ({
+        isValid: true,
+        reason: 'ok',
+        detectedAmount: 300,
+        payerName: 'Gonzalo Benjamin Enrique Garrote Perez',
+        payerFormalId: '210931468',
+        recipientName: 'Gonzalo Garrote',
+        recipientFormalId: '210931465',
+        recipientAccountNumber: '19841193252',
+        recipientBank: 'Banco Falabella',
+        paymentTimestamp: '2026-04-30T17:11:00-04:00',
+        transactionId: '156387031993',
+        confidence: 0.97
+      })
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-proof-wrong-destination',
+    from: '56911111111',
+    type: 'image',
+    text: '',
+    selectedId: null,
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    media: {
+      id: 'media-proof-wrong-destination',
+      mimeType: 'image/png',
+      caption: ''
+    }
+  });
+
+  assert.equal(sentMessages[0].kind, 'text');
+  assert.match(sentMessages[0].text, /cuenta destino del comprobante no coincide/i);
 });
 
 test('proof image is rejected when payment time is outside the allowed hold window', async () => {
