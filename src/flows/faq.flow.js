@@ -12,7 +12,10 @@ function createFaqFlow({ openAIService, serviceCatalogService }) {
 
   async function answerQuestion(question, collectedData) {
     const services = await serviceCatalogService.listActiveServices();
-    const text = await openAIService.answerFaq(question, services);
+    const service = collectedData?.serviceId
+      ? services.find((item) => item.id === collectedData.serviceId) || null
+      : null;
+    const text = await openAIService.answerFaq(question, services, { service });
 
     return buildReply({
       intent: 'faq',

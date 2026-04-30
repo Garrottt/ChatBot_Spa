@@ -88,8 +88,17 @@ function asksForServiceCatalog(question) {
   return /(que servicios|cuales servicios|servicios disponibles|que tratamientos|cuales tratamientos|precios|valores|catalogo|catalogo de servicios)/.test(normalized);
 }
 
-function buildDeterministicServiceAnswer(question, services) {
-  const matchedService = findMatchingService(question, services);
+function buildDeterministicServiceAnswer(question, services, context = {}) {
+  const matchedService = findMatchingService(question, services) || context.service || null;
+  const normalizedQuestion = normalizeSearchText(question);
+
+  if (
+    matchedService &&
+    /(precio|precios|valor|vale|cuanto cuesta|cuanto sale|cuanto valen|costo)/.test(normalizedQuestion)
+  ) {
+    return `✨ ${matchedService.name}\n⏱️ Duracion: ${matchedService.durationMinutes} minutos\n💰 Precio: ${formatServicePrice(matchedService.price, matchedService.currency)}`;
+  }
+
   if (matchedService) {
     const descriptionBlock = matchedService.description
       ? `${matchedService.description}\n`
@@ -160,10 +169,10 @@ function createOpenAIService() {
     return localIntentClassifier(text);
   }
 
-  async function answerFaq(question, services) {
+  async function answerFaq(question, services, context = {}) {
     const knownFaq = resolveFaq(question);
     const knownAnswer = knownFaq?.answer || null;
-    const deterministicServiceAnswer = buildDeterministicServiceAnswer(question, services);
+    const deterministicServiceAnswer = buildDeterministicServiceAnswer(question, services, context);
     const serviceLines = services
       .map((service) => `${service.name}: ${service.description}. Precio exacto ${formatServicePrice(service.price, service.currency)}. Duracion ${service.durationMinutes} min.`)
       .join('\n');

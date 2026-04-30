@@ -40,3 +40,36 @@ test('answerFaq returns exact prices for service catalog questions', async () =>
   assert.match(answer, /\$100 CLP/);
   assert.doesNotMatch(answer, /100\.000/);
 });
+
+test('answerFaq uses service context for generic price questions', async () => {
+  const service = createOpenAIService();
+
+  const answer = await service.answerFaq(
+    'cual es el valor?',
+    [
+      {
+        id: 'svc-1',
+        code: 'LIMPIEZA-FACIAL',
+        name: 'Limpieza facial profunda',
+        description: 'Limpieza completa.',
+        price: 197,
+        currency: 'CLP',
+        durationMinutes: 75
+      }
+    ],
+    {
+      service: {
+        id: 'svc-1',
+        code: 'LIMPIEZA-FACIAL',
+        name: 'Limpieza facial profunda',
+        description: 'Limpieza completa.',
+        price: 197,
+        currency: 'CLP',
+        durationMinutes: 75
+      }
+    }
+  );
+
+  assert.match(answer, /\$197 CLP/);
+  assert.doesNotMatch(answer, /197\.000/);
+});
