@@ -1,8 +1,13 @@
 const dayjs = require('dayjs');
+const utc = require('dayjs/plugin/utc');
+const timezone = require('dayjs/plugin/timezone');
 
 const { env } = require('../config/env');
 const { AppError } = require('../lib/errors');
 const { logger } = require('../lib/logger');
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 function createBookingService({ prisma, googleCalendar, paymentProvider, serviceCatalogService }) {
   async function quoteAvailability({ serviceId, date }) {
@@ -11,7 +16,7 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
       throw new AppError('La fecha debe venir en formato YYYY-MM-DD.', 400);
     }
 
-    if (dayjs(normalizedDate).endOf('day').isBefore(dayjs())) {
+    if (buildChileDateTime(normalizedDate, '23:59').isBefore(currentChileTime())) {
       throw new AppError('No es posible reservar fechas pasadas.', 400);
     }
 
@@ -44,9 +49,9 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
       date: normalizedDate,
       specialists
     });
-    const now = dayjs();
+    const now = currentChileTime();
     const availableSlots = specialistSlots.filter((slot) => {
-      const slotStart = dayjs(slot.startsAt);
+      const slotStart = parseChileDateTimeValue(slot.startsAt);
 
       if (!slotStart.isAfter(now)) {
         return false;
@@ -88,13 +93,13 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
     }
 
     const service = await serviceCatalogService.getServiceById(serviceId);
-    const startAt = dayjs(scheduledAt);
+    const startAt = parseSpaScheduledAt(scheduledAt);
 
     if (!startAt.isValid()) {
       throw new AppError('Invalid booking datetime', 400);
     }
 
-    if (startAt.isBefore(dayjs())) {
+    if (startAt.isBefore(currentChileTime())) {
       throw new AppError('No es posible reservar en una fecha u hora pasada.', 400);
     }
 
@@ -772,7 +777,33 @@ function getChileDayOfWeek(date) {
 }
 
 function buildChileDateTime(date, time) {
-  return dayjs(`${date}T${time}:00`);
+  return dayjs.tz(`${date} ${time}`, 'YYYY-MM-DD HH:mm', env.googleTimezone);
+}
+
+function parseChileDateTimeValue(value) {
+  const normalized = String(value || '').trim();
+  const match = normalized.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2})?$/);
+
+  if (match) {
+    return buildChileDateTime(match[1], match[2]);
+  }
+
+  return dayjs(normalized);
+}
+
+function parseSpaScheduledAt(value) {
+  const normalized = String(value || '').trim();
+  const localMatch = normalized.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2})?$/);
+
+  if (localMatch) {
+    return buildChileDateTime(localMatch[1], localMatch[2]);
+  }
+
+  return dayjs(normalized);
+}
+
+function currentChileTime() {
+  return dayjs().tz(env.googleTimezone);
 }
 
 function formatTimeValue(value) {
