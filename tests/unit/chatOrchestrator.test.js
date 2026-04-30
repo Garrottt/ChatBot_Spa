@@ -747,6 +747,7 @@ test('service consultation answer includes buttons for another question and book
   });
 
   assert.equal(sentMessages[0].kind, 'buttons');
+  assert.match(sentMessages[0].bodyText, /Precio: \$197 CLP/i);
   assert.match(sentMessages[0].bodyText, /Masaje relajante/i);
   assert.equal(sentMessages[0].buttons[0].id, 'bookservice:svc-1');
   assert.equal(sentMessages[0].buttons[1].id, 'askservice:svc-1');

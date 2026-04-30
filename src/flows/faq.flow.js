@@ -19,7 +19,7 @@ function createFaqFlow({ openAIService, serviceCatalogService }) {
     const outbound = service
       ? {
           kind: 'buttons',
-          bodyText: `¿Que desea hacer con ${service.name}?`,
+          bodyText: `${text}\n\n¿Que desea hacer con ${service.name}?`,
           buttons: [
             { id: `bookservice:${service.id}`, title: 'Reservar' },
             { id: `askservice:${service.id}`, title: 'Otra consulta' }
