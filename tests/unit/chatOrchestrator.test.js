@@ -454,6 +454,42 @@ test('transfer payment selection sends bank details instead of a payment link', 
   assert.doesNotMatch(sentMessages[0].text, /Datos bancarios para transferir:[\s\S]*Datos bancarios para transferir:/i);
 });
 
+test('payment amount question during proof wait answers with the exact remaining deposit', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'booking',
+      currentStep: 'awaiting_payment_proof',
+      collectedData: { bookingId: 'booking-1', serviceId: 'svc-1', date: '2026-04-30', time: '18:00' },
+      lastBookingId: 'booking-1'
+    },
+    bookingService: {
+      getBookingById: async () => ({
+        id: 'booking-1',
+        depositAmount: 100,
+        service: { name: 'Masaje de Espalda', currency: 'CLP' },
+        holdExpiresAt: '2099-04-30T23:20:00.000Z'
+      })
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-payment-amount',
+    from: '56911111111',
+    type: 'text',
+    text: 'cuanto es lo que debo de pagar',
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    selectedId: null,
+    media: null
+  });
+
+  assert.equal(sentMessages[0].kind, 'text');
+  assert.match(sentMessages[0].text, /abono requerido/i);
+  assert.match(sentMessages[0].text, /100 CLP/i);
+});
+
 test('service selection continues booking flow even when coming from consultation context', async () => {
   const { orchestrator, sentMessages } = createDependencies({
     client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
@@ -1340,6 +1376,70 @@ test('proof image is rejected when the destination account does not match the sp
 
   assert.equal(sentMessages[0].kind, 'text');
   assert.match(sentMessages[0].text, /cuenta destino del comprobante no coincide/i);
+});
+
+test('proof image is accepted when destination account matches even if recipient name is truncated', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonzalo Benjamin', lastName: 'Enrique Garrote Perez', formalId: '210931468' },
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'booking',
+      currentStep: 'awaiting_payment_proof',
+      collectedData: { bookingId: 'booking-1', serviceId: 'svc-1', date: '2026-04-30', time: '18:00' },
+      lastBookingId: 'booking-1'
+    },
+    bookingService: {
+      recordPaymentProofSubmission: async () => ({
+        id: 'booking-1',
+        depositAmount: 100,
+        createdAt: '2026-05-01T00:10:00.000Z',
+        holdExpiresAt: '2026-05-01T00:20:00.000Z',
+        service: { name: 'Masaje de Espalda', currency: 'CLP' },
+        client: { name: 'Gonzalo Benjamin', lastName: 'Enrique Garrote Perez', formalId: '210931468' }
+      }),
+      confirmPendingBooking: async () => ({
+        id: 'booking-1',
+        depositAmount: 100,
+        scheduledAt: '2026-04-30T22:00:00.000Z',
+        service: { name: 'Masaje de Espalda', currency: 'CLP' }
+      })
+    },
+    openAIService: {
+      craftBookingReply: async ({ fallbackMessage }) => fallbackMessage,
+      validatePaymentProof: async () => ({
+        isValid: true,
+        reason: 'ok',
+        detectedAmount: 100,
+        payerName: 'Gonzalo Benjamin Enrique Garrote Perez',
+        payerFormalId: null,
+        recipientName: 'Gonzalo benjamin enrique',
+        recipientFormalId: null,
+        recipientAccountNumber: '1020190317',
+        recipientBank: 'Mercado Pago',
+        paymentTimestamp: '2026-04-30T20:11:52-04:00',
+        transactionId: '955665533309',
+        confidence: 0.98
+      })
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-proof-truncated-recipient',
+    from: '56911111111',
+    type: 'image',
+    text: '',
+    selectedId: null,
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    media: {
+      id: 'media-proof-truncated-recipient',
+      mimeType: 'image/png',
+      caption: ''
+    }
+  });
+
+  assert.equal(sentMessages[0].kind, 'buttons');
+  assert.match(sentMessages[0].bodyText, /quedo confirmada/i);
 });
 
 test('proof image is rejected when payment time is outside the allowed hold window', async () => {

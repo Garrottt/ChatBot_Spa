@@ -430,6 +430,30 @@ function createChatOrchestrator({
       }
     }
 
+    if (paymentSteps.includes(conversation.currentStep) && text && asksForPaymentAmount(lowerText)) {
+      const bookingId = conversation.lastBookingId || collectedData.bookingId;
+      if (bookingId) {
+        const holdBooking = await bookingService.getBookingById(bookingId).catch(() => null);
+        if (holdBooking) {
+          const partialAmountPaid = Number(collectedData.partialAmountPaid || 0);
+          const totalRequired = Number(holdBooking.depositAmount || 0);
+          const remainingAmount = Math.max(totalRequired - partialAmountPaid, 0);
+          const currency = holdBooking.service?.currency || 'CLP';
+          const partialLine = partialAmountPaid > 0
+            ? `\n\nHasta ahora registra ${partialAmountPaid} ${currency} abonados, por lo que le faltan ${remainingAmount} ${currency}.`
+            : '';
+
+          return buildReply({
+            intent: 'booking',
+            step: conversation.currentStep,
+            text: `💰 El abono requerido para confirmar esta reserva es de ${remainingAmount} ${currency}.${partialLine}\n\nCuando realice la transferencia, envie aqui la foto o captura del comprobante para validarlo.`,
+            collectedData,
+            lastBookingId: bookingId
+          });
+        }
+      }
+    }
+
     // Catch-all: cualquier mensaje de texto durante un paso de pago no debe salir del contexto.
     // En lugar de caer al menu principal, recordar al cliente que envie el comprobante.
     if (paymentSteps.includes(conversation.currentStep) && text) {
@@ -1083,17 +1107,22 @@ function resolvePaymentProofRejectionReason(booking, validation) {
 
   const expectedRecipient = parseTransferRecipientDetails(env.spaTransferDetails);
   const detectedRecipientAccountNumber = normalizeAccountNumber(validation.recipientAccountNumber);
+  const accountNumberMatches = Boolean(
+    expectedRecipient.accountNumber &&
+    detectedRecipientAccountNumber &&
+    expectedRecipient.accountNumber === detectedRecipientAccountNumber
+  );
   if (expectedRecipient.accountNumber && detectedRecipientAccountNumber && expectedRecipient.accountNumber !== detectedRecipientAccountNumber) {
     return 'La cuenta destino del comprobante no coincide con la cuenta bancaria configurada para recibir el abono.';
   }
 
-  const detectedRecipientName = normalizePersonName(validation.recipientName);
-  if (expectedRecipient.name && detectedRecipientName && !personNameMatches(expectedRecipient.name, detectedRecipientName)) {
-    return 'El destinatario del comprobante no coincide con el titular configurado para recibir el abono.';
-  }
-
   const expectedRecipientFormalId = normalizeFormalId(expectedRecipient.formalId);
   const detectedRecipientFormalId = normalizeFormalId(validation.recipientFormalId);
+  const recipientFormalIdMatches = Boolean(
+    expectedRecipientFormalId &&
+    detectedRecipientFormalId &&
+    expectedRecipientFormalId === detectedRecipientFormalId
+  );
   if (expectedRecipientFormalId && detectedRecipientFormalId && expectedRecipientFormalId !== detectedRecipientFormalId) {
     return 'El RUT del destinatario del comprobante no coincide con el configurado para recibir el abono.';
   }
@@ -1102,6 +1131,17 @@ function resolvePaymentProofRejectionReason(booking, validation) {
   const detectedRecipientBank = normalizeSearchText(validation.recipientBank);
   if (expectedRecipientBank && detectedRecipientBank && expectedRecipientBank !== detectedRecipientBank) {
     return 'El banco destino del comprobante no coincide con el configurado para recibir el abono.';
+  }
+
+  const detectedRecipientName = normalizePersonName(validation.recipientName);
+  const hasStrongRecipientMatch = accountNumberMatches || recipientFormalIdMatches;
+  if (
+    expectedRecipient.name &&
+    detectedRecipientName &&
+    !hasStrongRecipientMatch &&
+    !personNameMatches(expectedRecipient.name, detectedRecipientName)
+  ) {
+    return 'El destinatario del comprobante no coincide con el titular configurado para recibir el abono.';
   }
 
   const paymentTimestamp = parsePaymentTimestamp(validation.paymentTimestamp);
@@ -1232,6 +1272,10 @@ function hasUsableProofExtraction(validation) {
     validation?.paymentTimestamp ||
     validation?.transactionId
   );
+}
+
+function asksForPaymentAmount(text) {
+  return /(cu[aá]nto (es|era|seria)? ?(lo )?(que )?(debo|tengo que)( de)? (pagar|abonar|transferir)|cu[aá]nto debo( de)? pagar|cu[aá]nto tengo que pagar|monto del abono|cu[aá]l es el monto|cu[aá]nto transfiero|cu[aá]nto deposito|cu[aá]nto tengo que abonar)/.test(String(text || '').toLowerCase());
 }
 
 function preserveSystemCollectedData(existingData, nextData) {
