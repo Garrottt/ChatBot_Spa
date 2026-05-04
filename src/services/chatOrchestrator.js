@@ -1068,6 +1068,10 @@ function resolvePaymentProofRejectionReason(booking, validation) {
     return 'No se pudo leer con claridad el monto del comprobante.';
   }
 
+  if (!validation.transactionId) {
+    return 'No se pudo leer el numero de operacion del comprobante.';
+  }
+
   const expectedName = normalizePersonName(getExpectedPayerName(booking));
   const detectedName = normalizePersonName(validation.payerName);
   if (!expectedName || !detectedName || !personNameMatches(expectedName, detectedName)) {
@@ -1076,7 +1080,7 @@ function resolvePaymentProofRejectionReason(booking, validation) {
 
   const expectedFormalId = normalizeFormalId(booking.payerFormalId || booking.client.formalId);
   const detectedFormalId = normalizeFormalId(validation.payerFormalId);
-  if (detectedFormalId && expectedFormalId && expectedFormalId !== detectedFormalId) {
+  if (!expectedFormalId || !detectedFormalId || expectedFormalId !== detectedFormalId) {
     return 'El RUT o identificador del comprobante no coincide con el registrado en la reserva.';
   }
 
@@ -1087,7 +1091,7 @@ function resolvePaymentProofRejectionReason(booking, validation) {
     detectedRecipientAccountNumber &&
     expectedRecipient.accountNumber === detectedRecipientAccountNumber
   );
-  if (expectedRecipient.accountNumber && detectedRecipientAccountNumber && expectedRecipient.accountNumber !== detectedRecipientAccountNumber) {
+  if (!expectedRecipient.accountNumber || !detectedRecipientAccountNumber || expectedRecipient.accountNumber !== detectedRecipientAccountNumber) {
     return 'La cuenta destino del comprobante no coincide con la cuenta bancaria configurada para recibir el abono.';
   }
 
@@ -1098,22 +1102,22 @@ function resolvePaymentProofRejectionReason(booking, validation) {
     detectedRecipientFormalId &&
     expectedRecipientFormalId === detectedRecipientFormalId
   );
-  if (expectedRecipientFormalId && detectedRecipientFormalId && expectedRecipientFormalId !== detectedRecipientFormalId) {
+  if (!expectedRecipientFormalId || !detectedRecipientFormalId || expectedRecipientFormalId !== detectedRecipientFormalId) {
     return 'El RUT del destinatario del comprobante no coincide con el configurado para recibir el abono.';
   }
 
   const expectedRecipientBank = normalizeSearchText(expectedRecipient.bank);
   const detectedRecipientBank = normalizeSearchText(validation.recipientBank);
-  if (expectedRecipientBank && detectedRecipientBank && expectedRecipientBank !== detectedRecipientBank) {
+  if (!expectedRecipientBank || !detectedRecipientBank || expectedRecipientBank !== detectedRecipientBank) {
     return 'El banco destino del comprobante no coincide con el configurado para recibir el abono.';
   }
 
   const detectedRecipientName = normalizePersonName(validation.recipientName);
   const hasStrongRecipientMatch = accountNumberMatches || recipientFormalIdMatches;
   if (
-    expectedRecipient.name &&
-    detectedRecipientName &&
-    !hasStrongRecipientMatch &&
+    !expectedRecipient.name ||
+    !detectedRecipientName ||
+    !hasStrongRecipientMatch ||
     !personNameMatches(expectedRecipient.name, detectedRecipientName)
   ) {
     return 'El destinatario del comprobante no coincide con el titular configurado para recibir el abono.';

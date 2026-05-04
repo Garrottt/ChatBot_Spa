@@ -773,6 +773,32 @@ test('valid proof image confirms the booking after payment validation', async ()
       currentStep: 'awaiting_payment_proof',
       collectedData: { bookingId: 'booking-1', serviceId: 'svc-1', date: '2026-04-15', time: '10:00' },
       lastBookingId: 'booking-1'
+    },
+    bookingService: {
+      recordPaymentProofSubmission: async () => ({
+        id: 'booking-1',
+        depositAmount: 100,
+        createdAt: '2026-04-15T12:00:00.000Z',
+        holdExpiresAt: '2026-04-15T12:10:00.000Z',
+        service: { name: 'Masaje relajante', currency: 'CLP' },
+        client: { name: 'Gonza', lastName: 'Perez', formalId: '210931468' }
+      })
+    },
+    openAIService: {
+      validatePaymentProof: async () => ({
+        isValid: true,
+        reason: 'ok',
+        detectedAmount: 100,
+        payerName: 'Gonza Perez',
+        payerFormalId: '210931468',
+        recipientName: 'Gonzalo Benjamin Enrique Garrote Perez',
+        recipientFormalId: '210931465',
+        recipientAccountNumber: '1020190317',
+        recipientBank: 'Mercado Pago',
+        paymentTimestamp: '2026-04-15T09:05:00-03:00',
+        transactionId: '156387031993',
+        confidence: 0.9
+      })
     }
   });
 
@@ -829,7 +855,12 @@ test('booking confirmation message formats the confirmed schedule in America/San
         detectedAmount: 100,
         payerName: 'Gonza Perez',
         payerFormalId: '210931468',
+        recipientName: 'Gonzalo Benjamin Enrique Garrote Perez',
+        recipientFormalId: '210931465',
+        recipientAccountNumber: '1020190317',
+        recipientBank: 'Mercado Pago',
         paymentTimestamp: '2026-04-30T17:05:00-04:00',
+        transactionId: '156387031993',
         confidence: 0.95
       })
     }
@@ -1451,7 +1482,12 @@ test('proof image is rejected when the payer name does not match the reservation
         detectedAmount: 100,
         payerName: 'Otra Persona',
         payerFormalId: '210931468',
+        recipientName: 'Gonzalo Benjamin Enrique Garrote Perez',
+        recipientFormalId: '210931465',
+        recipientAccountNumber: '1020190317',
+        recipientBank: 'Mercado Pago',
         paymentTimestamp: '2026-04-15T09:05:00-03:00',
+        transactionId: '156387031993',
         confidence: 0.9
       })
     }
@@ -1467,6 +1503,63 @@ test('proof image is rejected when the payer name does not match the reservation
     profileName: 'Gonza',
     media: {
       id: 'media-proof-name',
+      mimeType: 'image/png',
+      caption: ''
+    }
+  });
+
+  assert.equal(sentMessages[0].kind, 'text');
+  assert.match(sentMessages[0].text, /nombre del comprobante no coincide/i);
+});
+
+test('proof image with missing payer name is rejected under strict validation', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'booking',
+      currentStep: 'awaiting_payment_proof',
+      collectedData: { bookingId: 'booking-1', serviceId: 'svc-1', date: '2026-04-30', time: '18:00' },
+      lastBookingId: 'booking-1'
+    },
+    bookingService: {
+      recordPaymentProofSubmission: async () => ({
+        id: 'booking-1',
+        depositAmount: 100,
+        createdAt: '2026-04-30T20:00:00.000Z',
+        holdExpiresAt: '2026-04-30T22:30:00.000Z',
+        service: { name: 'Masaje relajante', currency: 'CLP' },
+        client: { name: 'Gonza', lastName: 'Perez', formalId: '210931468' }
+      })
+    },
+    openAIService: {
+      validatePaymentProof: async () => ({
+        isValid: true,
+        reason: 'ok',
+        detectedAmount: 100,
+        payerName: null,
+        payerFormalId: null,
+        recipientName: 'Gonzalo Benjamin Enrique Garrote Perez',
+        recipientFormalId: '210931465',
+        recipientAccountNumber: '1020190317',
+        recipientBank: 'Mercado Pago',
+        paymentTimestamp: '2026-04-30T17:11:00-04:00',
+        transactionId: '156387031993',
+        confidence: 0.97
+      })
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-proof-missing-name',
+    from: '56911111111',
+    type: 'image',
+    text: '',
+    selectedId: null,
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    media: {
+      id: 'media-proof-missing-name',
       mimeType: 'image/png',
       caption: ''
     }
@@ -1523,7 +1616,62 @@ test('proof image is rejected when the destination account does not match the sp
   assert.match(sentMessages[0].text, /cuenta destino del comprobante no coincide/i);
 });
 
-test('proof image is accepted when destination account matches even if recipient name is truncated', async () => {
+test('proof image rejects when destination account data is incomplete even if recipient RUT matches', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'booking',
+      currentStep: 'awaiting_payment_proof',
+      collectedData: { bookingId: 'booking-1', serviceId: 'svc-1', date: '2026-04-30', time: '18:00' },
+      lastBookingId: 'booking-1'
+    },
+    bookingService: {
+      recordPaymentProofSubmission: async () => ({
+        id: 'booking-1',
+        depositAmount: 100,
+        createdAt: '2026-04-30T20:00:00.000Z',
+        holdExpiresAt: '2026-04-30T22:30:00.000Z',
+        service: { name: 'Masaje relajante', currency: 'CLP' },
+        client: { name: 'Gonza', lastName: 'Perez', formalId: '210931468' }
+      })
+    },
+    openAIService: {
+      validatePaymentProof: async () => ({
+        isValid: true,
+        reason: 'ok',
+        detectedAmount: 100,
+        payerName: 'Gonza Perez',
+        payerFormalId: '210931468',
+        recipientFormalId: '210931465',
+        recipientBank: 'Banco Falabella',
+        paymentTimestamp: '2026-04-30T17:11:00-04:00',
+        transactionId: '156387031993',
+        confidence: 0.97
+      })
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-proof-bank-diff-rut-match',
+    from: '56911111111',
+    type: 'image',
+    text: '',
+    selectedId: null,
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    media: {
+      id: 'media-proof-bank-diff-rut-match',
+      mimeType: 'image/png',
+      caption: ''
+    }
+  });
+
+  assert.equal(sentMessages[0].kind, 'text');
+  assert.match(sentMessages[0].text, /cuenta destino del comprobante no coincide/i);
+});
+
+test('proof image is rejected when recipient name is truncated under strict validation', async () => {
   const { orchestrator, sentMessages } = createDependencies({
     client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonzalo Benjamin', lastName: 'Enrique Garrote Perez', formalId: '210931468' },
     conversation: {
@@ -1556,9 +1704,9 @@ test('proof image is accepted when destination account matches even if recipient
         reason: 'ok',
         detectedAmount: 100,
         payerName: 'Gonzalo Benjamin Enrique Garrote Perez',
-        payerFormalId: null,
+        payerFormalId: '210931468',
         recipientName: 'Gonzalo benjamin enrique',
-        recipientFormalId: null,
+        recipientFormalId: '210931465',
         recipientAccountNumber: '1020190317',
         recipientBank: 'Mercado Pago',
         paymentTimestamp: '2026-04-30T20:11:52-04:00',
@@ -1583,8 +1731,8 @@ test('proof image is accepted when destination account matches even if recipient
     }
   });
 
-  assert.equal(sentMessages[0].kind, 'buttons');
-  assert.match(sentMessages[0].bodyText, /quedo confirmada/i);
+  assert.equal(sentMessages[0].kind, 'text');
+  assert.match(sentMessages[0].text, /destinatario del comprobante no coincide/i);
 });
 
 test('proof image is rejected when payment time is outside the allowed hold window', async () => {
@@ -1604,7 +1752,12 @@ test('proof image is rejected when payment time is outside the allowed hold wind
         detectedAmount: 100,
         payerName: 'Gonza Perez',
         payerFormalId: '210931468',
+        recipientName: 'Gonzalo Benjamin Enrique Garrote Perez',
+        recipientFormalId: '210931465',
+        recipientAccountNumber: '1020190317',
+        recipientBank: 'Mercado Pago',
         paymentTimestamp: '2026-04-15T09:25:00-03:00',
+        transactionId: '156387031993',
         confidence: 0.9
       })
     }
@@ -1655,8 +1808,13 @@ test('proof image accepts receipts without visible RUT when amount, name and tim
         reason: 'ok',
         detectedAmount: 100,
         payerName: 'Gonza Benjamin Perez',
-        payerFormalId: null,
+        payerFormalId: '210931468',
+        recipientName: 'Gonzalo Benjamin Enrique Garrote Perez',
+        recipientFormalId: '210931465',
+        recipientAccountNumber: '1020190317',
+        recipientBank: 'Mercado Pago',
         paymentTimestamp: '2026-04-15T09:05:00-03:00',
+        transactionId: '156387031993',
         confidence: 0.9
       })
     }
@@ -1708,6 +1866,10 @@ test('proof image with lower amount offers partial payment options instead of re
         detectedAmount: 4300,
         payerName: 'Gonza Perez',
         payerFormalId: '210931468',
+        recipientName: 'Gonzalo Benjamin Enrique Garrote Perez',
+        recipientFormalId: '210931465',
+        recipientAccountNumber: '1020190317',
+        recipientBank: 'Mercado Pago',
         paymentTimestamp: '2026-04-15T09:05:00-03:00',
         transactionId: 'tx-4300',
         confidence: 0.92
@@ -1772,6 +1934,10 @@ test('proof image with higher amount confirms booking and explains the extra cre
         detectedAmount: 150,
         payerName: 'Gonza Perez',
         payerFormalId: '210931468',
+        recipientName: 'Gonzalo Benjamin Enrique Garrote Perez',
+        recipientFormalId: '210931465',
+        recipientAccountNumber: '1020190317',
+        recipientBank: 'Mercado Pago',
         paymentTimestamp: '2026-04-15T09:05:00-03:00',
         transactionId: 'tx-150',
         confidence: 0.94
