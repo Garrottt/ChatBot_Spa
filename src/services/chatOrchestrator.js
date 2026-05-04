@@ -1123,20 +1123,31 @@ function resolvePaymentProofRejectionReason(booking, validation) {
 
   const expectedName = normalizePersonName(getExpectedPayerName(booking));
   const detectedName = normalizePersonName(validation.payerName);
-  if (!detectedName) {
-    return 'No se pudo leer el nombre del pagador en el comprobante.';
-  }
-  if (!expectedName || !personNameMatches(expectedName, detectedName)) {
-    return 'El nombre del comprobante no coincide con los datos personales entregados para la reserva.';
-  }
+  const expectedFormalId = normalizeFormalIdLoose(booking.payerFormalId || booking.client.formalId);
+  const detectedFormalId = normalizeFormalIdLoose(validation.payerFormalId);
 
-  const expectedFormalId = normalizeFormalId(booking.payerFormalId || booking.client.formalId);
-  const detectedFormalId = normalizeFormalId(validation.payerFormalId);
-  if (!detectedFormalId) {
-    return 'No se pudo leer el RUT del pagador en el comprobante.';
-  }
-  if (!expectedFormalId || expectedFormalId !== detectedFormalId) {
-    return 'El RUT o identificador del comprobante no coincide con el registrado en la reserva.';
+  const nameProvided = Boolean(detectedName);
+  const formalIdProvided = Boolean(detectedFormalId);
+  const nameMatches = expectedName && detectedName && personNameMatches(expectedName, detectedName);
+  const formalIdMatches = expectedFormalId && detectedFormalId && expectedFormalId === detectedFormalId;
+
+  if (nameProvided && formalIdProvided) {
+    if (!nameMatches) {
+      return 'El nombre del comprobante no coincide con los datos personales entregados para la reserva.';
+    }
+    if (!formalIdMatches) {
+      return 'El RUT o identificador del comprobante no coincide con el registrado en la reserva.';
+    }
+  } else if (nameProvided) {
+    if (!nameMatches) {
+      return 'El nombre del comprobante no coincide con los datos personales entregados para la reserva.';
+    }
+  } else if (formalIdProvided) {
+    if (!formalIdMatches) {
+      return 'El RUT o identificador del comprobante no coincide con el registrado en la reserva.';
+    }
+  } else {
+    return 'No se pudo leer el nombre o el RUT del pagador en el comprobante.';
   }
 
   const paymentTimestamp = parsePaymentTimestamp(validation.paymentTimestamp);
@@ -1205,6 +1216,13 @@ function personNameMatches(expectedName, detectedName) {
 
 function normalizeFormalId(value) {
   return String(value || '').toUpperCase().replace(/[^0-9K]/g, '');
+}
+
+function normalizeFormalIdLoose(value) {
+  return String(value || '')
+    .toUpperCase()
+    .replace(/[^0-9K]/g, '')
+    .replace(/^0+/, '');
 }
 
 function normalizeAccountNumber(value) {
