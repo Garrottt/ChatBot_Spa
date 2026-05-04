@@ -490,6 +490,120 @@ test('payment amount question during proof wait answers with the exact remaining
   assert.match(sentMessages[0].text, /100 CLP/i);
 });
 
+test('payment destination question during proof wait returns bank details', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'booking',
+      currentStep: 'awaiting_payment_proof',
+      collectedData: { bookingId: 'booking-1', serviceId: 'svc-1', date: '2026-04-30', time: '18:00' },
+      lastBookingId: 'booking-1'
+    },
+    bookingService: {
+      getBookingById: async () => ({
+        id: 'booking-1',
+        depositAmount: 100,
+        service: { name: 'Masaje de Espalda', currency: 'CLP' },
+        holdExpiresAt: '2099-04-30T23:20:00.000Z'
+      })
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-payment-destination',
+    from: '56911111111',
+    type: 'text',
+    text: 'a que cuenta debo transferir',
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    selectedId: null,
+    media: null
+  });
+
+  assert.equal(sentMessages[0].kind, 'text');
+  assert.match(sentMessages[0].text, /datos para realizar el abono/i);
+  assert.match(sentMessages[0].text, /Numero de cuenta: 1020190317/i);
+});
+
+test('expired hold returns buttons instead of falling back to the main menu', async () => {
+  const { orchestrator, sentMessages, conversation } = createDependencies({
+    client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'booking',
+      currentStep: 'main_menu',
+      collectedData: { bookingId: 'booking-1', holdExpiredBookingId: 'booking-1' },
+      lastBookingId: 'booking-1'
+    },
+    bookingService: {
+      getBookingById: async () => ({
+        id: 'booking-1',
+        depositAmount: 100,
+        paymentStatus: 'EXPIRED',
+        status: 'CANCELLED',
+        service: { name: 'Masaje de Espalda', currency: 'CLP' },
+        holdExpiresAt: '2026-04-30T23:10:00.000Z'
+      })
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-hold-expired',
+    from: '56911111111',
+    type: 'text',
+    text: 'aun puedo pagar',
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    selectedId: null,
+    media: null
+  });
+
+  assert.equal(sentMessages[0].kind, 'buttons');
+  assert.match(sentMessages[0].bodyText, /ya vencio/i);
+  assert.equal(sentMessages[0].buttons[0].id, 'menu:main');
+  assert.equal(sentMessages[0].buttons[1].id, 'menu:book');
+  assert.equal(conversation.currentStep, 'main_menu');
+});
+
+test('hold expired fallback still responds with buttons after the reminder flow updates state', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'booking',
+      currentStep: 'hold_expired',
+      collectedData: { bookingId: 'booking-1', holdExpiredBookingId: 'booking-1' },
+      lastBookingId: 'booking-1'
+    },
+    bookingService: {
+      getBookingById: async () => ({
+        id: 'booking-1',
+        depositAmount: 100,
+        paymentStatus: 'EXPIRED',
+        status: 'CANCELLED',
+        service: { name: 'Masaje de Espalda', currency: 'CLP' },
+        holdExpiresAt: '2026-04-30T23:10:00.000Z'
+      })
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-hold-expired-2',
+    from: '56911111111',
+    type: 'text',
+    text: 'cuanto tiempo me queda?',
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    selectedId: null,
+    media: null
+  });
+
+  assert.equal(sentMessages[0].kind, 'buttons');
+  assert.equal(sentMessages[0].buttons[0].id, 'menu:main');
+  assert.equal(sentMessages[0].buttons[1].id, 'menu:book');
+});
+
 test('service selection continues booking flow even when coming from consultation context', async () => {
   const { orchestrator, sentMessages } = createDependencies({
     client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },

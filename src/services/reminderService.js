@@ -3,6 +3,10 @@ const dayjs = require('dayjs');
 const { env } = require('../config/env');
 const { logger } = require('../lib/logger');
 
+function buildExpiredHoldButtonsText(booking) {
+  return `⌛ Su tiempo para confirmar la cita de *${booking.service.name}* ya finalizo y el horario fue liberado.`;
+}
+
 function createReminderService({
   prisma,
   metaClient,
@@ -134,16 +138,13 @@ function createReminderService({
 
     for (const booking of expiredBookings) {
       const conversation = await conversationService.getOrCreateActiveConversation(booking.clientId);
-      const partialAmountPaid = (conversation.collectedData?.partialAmountPaid) || 0;
-
-      const partialNote = partialAmountPaid > 0
-        ? `\n\nDetectamos que habia realizado un abono parcial de *${partialAmountPaid} ${booking.service.currency}* para esta reserva. El equipo del spa se pondra en contacto con usted a la brevedad para solicitar sus datos bancarios y gestionar la devolucion de ese monto.`
-        : '';
-
-      const text = `⌛ Su tiempo para confirmar la cita de *${booking.service.name}* ya finalizo y el horario fue liberado.${partialNote}\n\nCuando lo desee, escriba *menu* para volver al menu principal y realizar una nueva reserva.`;
+      const text = buildExpiredHoldButtonsText(booking);
 
       try {
-        await metaClient.sendTextMessage(booking.client.whatsappNumber, text);
+        await metaClient.sendButtonsMessage(booking.client.whatsappNumber, `${text}\n\n¿Que desea hacer ahora?`, [
+          { id: 'menu:main', title: 'Menu principal' },
+          { id: 'menu:book', title: 'Reservar otro servicio' }
+        ]);
 
         await messageService.createOutgoingMessage({
           conversationId: conversation.id,
@@ -154,6 +155,17 @@ function createReminderService({
             step: 'main_menu',
             bookingId: booking.id
           }
+        });
+
+        await conversationService.updateConversation(conversation.id, {
+          currentIntent: 'booking',
+          currentStep: 'hold_expired',
+          collectedData: {
+            ...(conversation.collectedData || {}),
+            bookingId: booking.id,
+            holdExpiredBookingId: booking.id
+          },
+          lastBookingId: booking.id
         });
 
         sent += 1;

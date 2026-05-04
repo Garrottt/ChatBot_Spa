@@ -402,85 +402,45 @@ function createChatOrchestrator({
       return bookingFlow.startBookingFlow(client, collectedData);
     }
 
-    // Consulta de tiempo restante para el pago
+    // Bloque de pago y expiración: responde primero si la reserva ya vencio,
+    // aun si la conversacion quedo en main_menu.
     const paymentSteps = ['awaiting_payment_proof', 'awaiting_partial_supplement', 'payment_proof_rejected_retry'];
-    if (paymentSteps.includes(conversation.currentStep) && text) {
-      const bookingId = conversation.lastBookingId || collectedData.bookingId;
-      if (bookingId) {
-        const holdBooking = await bookingService.getBookingById(bookingId).catch(() => null);
-        const isExpired = Boolean(
-          holdBooking &&
-          (holdBooking.paymentStatus === 'EXPIRED' || holdBooking.status === 'CANCELLED')
-        );
-        if (isExpired || holdBooking?.holdExpiresAt) {
-          const minutesLeft = holdBooking?.holdExpiresAt
-            ? Math.ceil(dayjs(holdBooking.holdExpiresAt).diff(dayjs(), 'second') / 60)
-            : 0;
-          if (isExpired || minutesLeft <= 0) {
-            const expiredText = '⌛ El tiempo para confirmar la cita ya vencio y el horario fue liberado.';
-            return buildReply({
-              intent: 'booking',
-              step: 'main_menu',
-              text: `${expiredText}\n\nSeleccione una opcion para continuar:`,
-              collectedData: {},
-              outbound: {
-                kind: 'buttons',
-                bodyText: `${expiredText}\n\n¿Que desea hacer ahora?`,
-                buttons: [
-                  { id: 'menu:main', title: 'Menu principal' },
-                  { id: 'menu:book', title: 'Reservar otro servicio' }
-                ]
-              }
-            });
-          }
+    const bookingId = conversation.lastBookingId || collectedData.bookingId;
+    const holdBooking = bookingId ? await bookingService.getBookingById(bookingId).catch(() => null) : null;
+    const holdInfo = getHoldState(holdBooking);
+    const holdExpiredSelected = conversation.currentStep === 'hold_expired' || collectedData.holdExpiredBookingId;
 
-          if (asksForTimeRemaining(lowerText)) {
-            const minuteWord = minutesLeft === 1 ? 'minuto' : 'minutos';
-            return buildReply({
-              intent: 'booking',
-              step: conversation.currentStep,
-              text: `⏳ Le quedan aproximadamente ${minutesLeft} ${minuteWord} para enviar su comprobante y confirmar su cita.`,
-              collectedData,
-              lastBookingId: bookingId
-            });
-          }
-        }
-      }
+    if (holdExpiredSelected && text) {
+      return buildExpiredHoldReply(holdBooking);
     }
 
-    if (paymentSteps.includes(conversation.currentStep) && text && asksForPaymentAmount(lowerText)) {
-      const bookingId = conversation.lastBookingId || collectedData.bookingId;
-      if (bookingId) {
-        const holdBooking = await bookingService.getBookingById(bookingId).catch(() => null);
-        if (holdBooking) {
-          const partialAmountPaid = Number(collectedData.partialAmountPaid || 0);
-          const totalRequired = Number(holdBooking.depositAmount || 0);
-          const remainingAmount = Math.max(totalRequired - partialAmountPaid, 0);
-          const currency = holdBooking.service?.currency || 'CLP';
-          const partialLine = partialAmountPaid > 0
-            ? `\n\nHasta ahora registra ${partialAmountPaid} ${currency} abonados, por lo que le faltan ${remainingAmount} ${currency}.`
-            : '';
-
-          return buildReply({
-            intent: 'booking',
-            step: conversation.currentStep,
-            text: `💰 El abono requerido para confirmar esta reserva es de ${remainingAmount} ${currency}.${partialLine}\n\nCuando realice la transferencia, envie aqui la foto o captura del comprobante para validarlo.`,
-            collectedData,
-            lastBookingId: bookingId
-          });
-        }
-      }
+    if (holdInfo.isExpired && text) {
+      return buildExpiredHoldReply(holdBooking);
     }
 
-    // Catch-all: cualquier mensaje de texto durante un paso de pago no debe salir del contexto.
-    // En lugar de caer al menu principal, recordar al cliente que envie el comprobante.
-    if (paymentSteps.includes(conversation.currentStep) && text) {
+    if (paymentSteps.includes(conversation.currentStep) && text && holdBooking) {
+      if (asksForTimeRemaining(lowerText)) {
+        return buildHoldTimeReply(holdBooking, holdInfo.minutesLeft, conversation.currentStep, collectedData, bookingId);
+      }
+
+      if (asksForPaymentAmount(lowerText)) {
+        return buildHoldPaymentDetailsReply(holdBooking, collectedData, bookingId);
+      }
+
+      if (asksForPaymentDestination(lowerText)) {
+        return buildHoldPaymentDestinationReply(holdBooking, collectedData, bookingId);
+      }
+
+      if (asksForPaymentInfo(lowerText)) {
+        return buildHoldPaymentInfoReply(holdBooking, holdInfo.minutesLeft, collectedData, bookingId);
+      }
+
       return buildReply({
         intent: 'booking',
         step: conversation.currentStep,
-        text: '⏳ Su reserva sigue activa.\n\nCuando realice el pago, envie aqui una foto o captura del comprobante para confirmarlo.\n\nSi quiere saber cuanto tiempo le queda, escriba "cuanto tiempo me queda".',
+        text: '⏳ Su reserva sigue activa.\n\nPuede consultarme el monto, la cuenta o el tiempo restante, o enviar aqui la foto o captura del comprobante para confirmarlo.',
         collectedData,
-        lastBookingId: conversation.lastBookingId || collectedData.bookingId || null
+        lastBookingId: bookingId
       });
     }
 
@@ -661,7 +621,7 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'booking',
         step: conversation.currentStep,
-        text: '📸 Para validar el abono, necesito que envie una foto o captura del comprobante dentro del tiempo indicado.',
+        text: '📸 Para validar el abono, necesito que envie una foto o captura del comprobante dentro del tiempo indicado. Tambien puede preguntarme el monto o los datos de la cuenta.',
         collectedData,
         lastBookingId: conversation.lastBookingId || collectedData.bookingId || null
       });
@@ -1294,6 +1254,102 @@ function hasUsableProofExtraction(validation) {
 
 function asksForPaymentAmount(text) {
   return /(cu[aá]nto (es|era|seria)? ?(lo )?(que )?(debo|tengo que)( de)? (pagar|abonar|transferir)|cu[aá]nto debo( de)? pagar|cu[aá]nto tengo que pagar|monto del abono|cu[aá]l es el monto|cu[aá]nto transfiero|cu[aá]nto deposito|cu[aá]nto tengo que abonar)/.test(String(text || '').toLowerCase());
+}
+
+function asksForPaymentDestination(text) {
+  return /(a que cuenta|a qu[eé] cuenta|que cuenta|cuenta destino|datos bancarios|datos de cuenta|a quien le transfiero|a nombre de quien|titular|banco|rut|numero de cuenta|n[uú]mero de cuenta|correo|transferencia)/.test(String(text || '').toLowerCase());
+}
+
+function asksForPaymentInfo(text) {
+  return /(cu[aá]nto era|cuanto era|cuanto es|a que cuenta|datos bancarios|monto|abono|pago|transferencia)/.test(String(text || '').toLowerCase());
+}
+
+function getHoldState(booking) {
+  if (!booking) {
+    return { isExpired: false, minutesLeft: 0 };
+  }
+
+  const expiresAt = booking.holdExpiresAt ? dayjs(booking.holdExpiresAt) : null;
+  const minutesLeft = expiresAt ? Math.ceil(expiresAt.diff(dayjs(), 'second') / 60) : 0;
+  const isExpired = Boolean(
+    booking.paymentStatus === 'EXPIRED' ||
+    booking.status === 'CANCELLED' ||
+    (expiresAt && minutesLeft <= 0)
+  );
+
+  return { isExpired, minutesLeft };
+}
+
+function buildHoldPaymentDetailsReply(holdBooking, collectedData, bookingId) {
+  const partialAmountPaid = Number(collectedData.partialAmountPaid || 0);
+  const totalRequired = Number(holdBooking.depositAmount || 0);
+  const remainingAmount = Math.max(totalRequired - partialAmountPaid, 0);
+  const currency = holdBooking.service?.currency || 'CLP';
+  const partialLine = partialAmountPaid > 0
+    ? `\n\nHasta ahora registra ${partialAmountPaid} ${currency} abonados, por lo que le faltan ${remainingAmount} ${currency}.`
+    : '';
+
+  return buildReply({
+    intent: 'booking',
+    step: holdBooking.paymentStatus === 'EXPIRED' ? 'hold_expired' : 'awaiting_payment_proof',
+    text: `💰 El abono requerido para confirmar esta reserva es de ${remainingAmount} ${currency}.${partialLine}\n\nCuando realice la transferencia, envie aqui la foto o captura del comprobante para validarlo.`,
+    collectedData,
+    lastBookingId: bookingId
+  });
+}
+
+function buildHoldPaymentDestinationReply(holdBooking, collectedData, bookingId) {
+  const details = String(env.spaTransferDetails || '').trim() || 'No tengo cargados los datos bancarios en este momento.';
+  return buildReply({
+    intent: 'booking',
+    step: holdBooking.paymentStatus === 'EXPIRED' ? 'hold_expired' : 'awaiting_payment_proof',
+    text: `🏦 Estos son los datos para realizar el abono:\n\n${details}\n\nSi lo desea, tambien puedo indicarle el monto exacto a pagar.`,
+    collectedData,
+    lastBookingId: bookingId
+  });
+}
+
+function buildHoldPaymentInfoReply(holdBooking, minutesLeft, collectedData, bookingId) {
+  const totalRequired = Number(holdBooking.depositAmount || 0);
+  const currency = holdBooking.service?.currency || 'CLP';
+  const timeText = minutesLeft > 0 ? ` Le quedan aproximadamente ${minutesLeft} ${minutesLeft === 1 ? 'minuto' : 'minutos'}.` : '';
+  return buildReply({
+    intent: 'booking',
+    step: holdBooking.paymentStatus === 'EXPIRED' ? 'hold_expired' : 'awaiting_payment_proof',
+    text: `💬 El abono es de ${totalRequired} ${currency}.\n\nPuede transferirlo a la cuenta informada y enviar aqui el comprobante.${timeText}`,
+    collectedData,
+    lastBookingId: bookingId
+  });
+}
+
+function buildHoldTimeReply(holdBooking, minutesLeft, step, collectedData, bookingId) {
+  const minuteWord = minutesLeft === 1 ? 'minuto' : 'minutos';
+  return buildReply({
+    intent: 'booking',
+    step,
+    text: `⏳ Le quedan aproximadamente ${minutesLeft} ${minuteWord} para enviar su comprobante y confirmar su cita.`,
+    collectedData,
+    lastBookingId: bookingId
+  });
+}
+
+function buildExpiredHoldReply(holdBooking) {
+  const text = '⌛ El tiempo para confirmar la cita ya vencio y el horario fue liberado.';
+  const serviceName = holdBooking?.service?.name || 'su reserva';
+  return buildReply({
+    intent: 'booking',
+    step: 'main_menu',
+    text: `${text}\n\nSeleccione una opcion para continuar sobre ${serviceName}:`,
+    collectedData: {},
+    outbound: {
+      kind: 'buttons',
+      bodyText: `${text}\n\n¿Que desea hacer ahora?`,
+      buttons: [
+        { id: 'menu:main', title: 'Menu principal' },
+        { id: 'menu:book', title: 'Reservar otro servicio' }
+      ]
+    }
+  });
 }
 
 function preserveSystemCollectedData(existingData, nextData) {
