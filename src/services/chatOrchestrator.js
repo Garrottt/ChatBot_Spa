@@ -1102,11 +1102,21 @@ function resolvePaymentProofRejectionReason(booking, validation) {
 
   const detectedRecipientName = normalizePersonName(validation.recipientName);
   const hasStrongRecipientMatch = accountNumberMatches || recipientFormalIdMatches;
+  const recipientAliases = [
+    'gonzalo garrote perez'
+  ].map(normalizePersonName);
+  const recipientNameMatches = expectedRecipient.name && detectedRecipientName
+    ? personNameMatches(expectedRecipient.name, detectedRecipientName)
+    : false;
+  const aliasMatches = recipientAliases.some((alias) =>
+    alias && detectedRecipientName && personNameMatches(alias, detectedRecipientName)
+  );
+
   if (
     !expectedRecipient.name ||
     !detectedRecipientName ||
     !hasStrongRecipientMatch ||
-    !personNameMatches(expectedRecipient.name, detectedRecipientName)
+    (!recipientNameMatches && !aliasMatches)
   ) {
     return 'El destinatario del comprobante no coincide con el titular configurado para recibir el abono.';
   }

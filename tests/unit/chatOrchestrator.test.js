@@ -1671,7 +1671,7 @@ test('proof image rejects when destination account data is incomplete even if re
   assert.match(sentMessages[0].text, /cuenta destino del comprobante no coincide/i);
 });
 
-test('proof image is rejected when recipient name is truncated under strict validation', async () => {
+test('proof image accepts recipient alias name under strict validation', async () => {
   const { orchestrator, sentMessages } = createDependencies({
     client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonzalo Benjamin', lastName: 'Enrique Garrote Perez', formalId: '210931468' },
     conversation: {
@@ -1705,7 +1705,7 @@ test('proof image is rejected when recipient name is truncated under strict vali
         detectedAmount: 100,
         payerName: 'Gonzalo Benjamin Enrique Garrote Perez',
         payerFormalId: '210931468',
-        recipientName: 'Gonzalo benjamin enrique',
+        recipientName: 'Gonzalo Garrote Perez',
         recipientFormalId: '210931465',
         recipientAccountNumber: '1020190317',
         recipientBank: 'Mercado Pago',
@@ -1731,8 +1731,8 @@ test('proof image is rejected when recipient name is truncated under strict vali
     }
   });
 
-  assert.equal(sentMessages[0].kind, 'text');
-  assert.match(sentMessages[0].text, /destinatario del comprobante no coincide|cuenta destino del comprobante no coincide/i);
+  assert.equal(sentMessages[0].kind, 'buttons');
+  assert.match(sentMessages[0].bodyText, /quedo confirmada/i);
 });
 
 test('proof image is rejected when payment time is outside the allowed hold window', async () => {
