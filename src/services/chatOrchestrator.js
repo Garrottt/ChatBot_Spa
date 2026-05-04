@@ -408,13 +408,10 @@ function createChatOrchestrator({
     const bookingId = conversation.lastBookingId || collectedData.bookingId;
     const holdBooking = bookingId ? await bookingService.getBookingById(bookingId).catch(() => null) : null;
     const holdInfo = getHoldState(holdBooking);
-    const holdExpiredSelected = conversation.currentStep === 'hold_expired' || collectedData.holdExpiredBookingId;
+    const shouldCheckHold = paymentSteps.includes(conversation.currentStep) || conversation.currentStep === 'hold_expired';
+    const paymentInquiry = text && asksForPaymentFollowup(lowerText);
 
-    if (holdExpiredSelected && text) {
-      return buildExpiredHoldReply(holdBooking);
-    }
-
-    if (holdInfo.isExpired && text) {
+    if (!selectedAction && (shouldCheckHold || paymentInquiry) && holdInfo.isExpired && text) {
       return buildExpiredHoldReply(holdBooking);
     }
 
@@ -1262,6 +1259,10 @@ function asksForPaymentDestination(text) {
 
 function asksForPaymentInfo(text) {
   return /(cu[aá]nto era|cuanto era|cuanto es|a que cuenta|datos bancarios|monto|abono|pago|transferencia)/.test(String(text || '').toLowerCase());
+}
+
+function asksForPaymentFollowup(text) {
+  return asksForPaymentAmount(text) || asksForPaymentDestination(text) || asksForPaymentInfo(text) || asksForTimeRemaining(text);
 }
 
 function getHoldState(booking) {

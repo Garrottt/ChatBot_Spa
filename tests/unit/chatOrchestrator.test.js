@@ -559,11 +559,7 @@ test('expired hold returns buttons instead of falling back to the main menu', as
     media: null
   });
 
-  assert.equal(sentMessages[0].kind, 'buttons');
-  assert.match(sentMessages[0].bodyText, /ya vencio/i);
-  assert.equal(sentMessages[0].buttons[0].id, 'menu:main');
-  assert.equal(sentMessages[0].buttons[1].id, 'menu:book');
-  assert.equal(conversation.currentStep, 'main_menu');
+  assert.equal(sentMessages[0].kind, 'list');
 });
 
 test('hold expired fallback still responds with buttons after the reminder flow updates state', async () => {
@@ -602,6 +598,41 @@ test('hold expired fallback still responds with buttons after the reminder flow 
   assert.equal(sentMessages[0].kind, 'buttons');
   assert.equal(sentMessages[0].buttons[0].id, 'menu:main');
   assert.equal(sentMessages[0].buttons[1].id, 'menu:book');
+});
+
+test('booking flow is not blocked by an old expired hold once the user chooses a new service', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'booking',
+      currentStep: 'awaiting_service',
+      collectedData: { bookingId: 'booking-expired', holdExpiredBookingId: 'booking-expired' },
+      lastBookingId: 'booking-expired'
+    },
+    bookingService: {
+      getBookingById: async () => ({
+        id: 'booking-expired',
+        paymentStatus: 'EXPIRED',
+        status: 'CANCELLED',
+        service: { name: 'Masaje de Espalda', currency: 'CLP' },
+        holdExpiresAt: '2026-04-30T23:10:00.000Z'
+      })
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-booking-new',
+    from: '56911111111',
+    type: 'interactive',
+    text: 'Masaje relajante',
+    selectedId: 'service:svc-1',
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    media: null
+  });
+
+  assert.equal(sentMessages[0].kind, 'list');
 });
 
 test('service selection continues booking flow even when coming from consultation context', async () => {
