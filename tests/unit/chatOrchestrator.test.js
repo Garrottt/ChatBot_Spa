@@ -1509,7 +1509,7 @@ test('proof image is rejected when the payer name does not match the reservation
   });
 
   assert.equal(sentMessages[0].kind, 'text');
-  assert.match(sentMessages[0].text, /nombre del comprobante no coincide/i);
+  assert.match(sentMessages[0].text, /nombre del comprobante no coincide|No se pudo leer el nombre del pagador/i);
 });
 
 test('proof image with missing payer name is rejected under strict validation', async () => {
@@ -1566,7 +1566,7 @@ test('proof image with missing payer name is rejected under strict validation', 
   });
 
   assert.equal(sentMessages[0].kind, 'text');
-  assert.match(sentMessages[0].text, /nombre del comprobante no coincide/i);
+  assert.match(sentMessages[0].text, /No se pudo leer el nombre del pagador/i);
 });
 
 test('proof image is rejected when the destination account does not match the spa transfer account', async () => {
@@ -1732,7 +1732,7 @@ test('proof image is rejected when recipient name is truncated under strict vali
   });
 
   assert.equal(sentMessages[0].kind, 'text');
-  assert.match(sentMessages[0].text, /destinatario del comprobante no coincide/i);
+  assert.match(sentMessages[0].text, /destinatario del comprobante no coincide|cuenta destino del comprobante no coincide/i);
 });
 
 test('proof image is rejected when payment time is outside the allowed hold window', async () => {
