@@ -404,28 +404,46 @@ function createChatOrchestrator({
 
     // Consulta de tiempo restante para el pago
     const paymentSteps = ['awaiting_payment_proof', 'awaiting_partial_supplement', 'payment_proof_rejected_retry'];
-    if (paymentSteps.includes(conversation.currentStep) && text && asksForTimeRemaining(lowerText)) {
+    if (paymentSteps.includes(conversation.currentStep) && text) {
       const bookingId = conversation.lastBookingId || collectedData.bookingId;
       if (bookingId) {
         const holdBooking = await bookingService.getBookingById(bookingId).catch(() => null);
-        if (holdBooking && holdBooking.holdExpiresAt) {
-          const minutesLeft = Math.ceil(dayjs(holdBooking.holdExpiresAt).diff(dayjs(), 'second') / 60);
-          if (minutesLeft <= 0) {
+        const isExpired = Boolean(
+          holdBooking &&
+          (holdBooking.paymentStatus === 'EXPIRED' || holdBooking.status === 'CANCELLED')
+        );
+        if (isExpired || holdBooking?.holdExpiresAt) {
+          const minutesLeft = holdBooking?.holdExpiresAt
+            ? Math.ceil(dayjs(holdBooking.holdExpiresAt).diff(dayjs(), 'second') / 60)
+            : 0;
+          if (isExpired || minutesLeft <= 0) {
+            const expiredText = '⌛ El tiempo para confirmar la cita ya vencio y el horario fue liberado.';
             return buildReply({
               intent: 'booking',
               step: 'main_menu',
-              text: '⌛ Su tiempo para confirmar la cita ya expiro y el horario fue liberado.\n\nEscriba "menu" para volver al menu principal y realizar una nueva reserva.',
-              collectedData: {}
+              text: `${expiredText}\n\nSeleccione una opcion para continuar:`,
+              collectedData: {},
+              outbound: {
+                kind: 'buttons',
+                bodyText: `${expiredText}\n\n¿Que desea hacer ahora?`,
+                buttons: [
+                  { id: 'menu:main', title: 'Menu principal' },
+                  { id: 'menu:book', title: 'Reservar otro servicio' }
+                ]
+              }
             });
           }
-          const minuteWord = minutesLeft === 1 ? 'minuto' : 'minutos';
-          return buildReply({
-            intent: 'booking',
-            step: conversation.currentStep,
-            text: `⏳ Le quedan aproximadamente ${minutesLeft} ${minuteWord} para enviar su comprobante y confirmar su cita.`,
-            collectedData,
-            lastBookingId: bookingId
-          });
+
+          if (asksForTimeRemaining(lowerText)) {
+            const minuteWord = minutesLeft === 1 ? 'minuto' : 'minutos';
+            return buildReply({
+              intent: 'booking',
+              step: conversation.currentStep,
+              text: `⏳ Le quedan aproximadamente ${minutesLeft} ${minuteWord} para enviar su comprobante y confirmar su cita.`,
+              collectedData,
+              lastBookingId: bookingId
+            });
+          }
         }
       }
     }
