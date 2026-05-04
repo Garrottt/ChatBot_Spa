@@ -1642,9 +1642,9 @@ test('proof image is rejected when the destination account does not match the sp
         reason: 'ok',
         detectedAmount: 300,
         payerName: 'Gonzalo Benjamin Enrique Garrote Perez',
-        payerFormalId: '210931468',
+        payerFormalId: '21093146-8',
         recipientName: 'Gonzalo Garrote',
-        recipientFormalId: '210931465',
+        recipientFormalId: null,
         recipientAccountNumber: '19841193252',
         recipientBank: 'Banco Falabella',
         paymentTimestamp: '2026-04-30T17:11:00-04:00',
@@ -1671,6 +1671,63 @@ test('proof image is rejected when the destination account does not match the sp
 
   assert.equal(sentMessages[0].kind, 'text');
   assert.match(sentMessages[0].text, /cuenta destino del comprobante no coincide/i);
+});
+
+test('proof image accepts recipient name and account when recipient RUT is missing', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'booking',
+      currentStep: 'awaiting_payment_proof',
+      collectedData: { bookingId: 'booking-1', serviceId: 'svc-1', date: '2026-05-04', time: '00:30' },
+      lastBookingId: 'booking-1'
+    },
+    bookingService: {
+      recordPaymentProofSubmission: async () => ({
+        id: 'booking-1',
+        depositAmount: 100,
+        createdAt: '2026-05-04T04:40:00.000Z',
+        holdExpiresAt: '2026-05-04T05:10:00.000Z',
+        service: { name: 'Masaje relajante', currency: 'CLP' },
+        client: { name: 'Gonza', lastName: 'Perez', formalId: '210931468' }
+      })
+    },
+    openAIService: {
+      validatePaymentProof: async () => ({
+        isValid: true,
+        reason: 'ok',
+        detectedAmount: 100,
+        payerName: 'Gonza Perez',
+        payerFormalId: '21093146-8',
+        recipientName: 'Gonzalo Benjamin Enrique Garrote Perez',
+        recipientFormalId: null,
+        recipientAccountNumber: '1020190317',
+        recipientBank: 'Mercado Pago',
+        paymentTimestamp: '2026-05-04T00:55:40-04:00',
+        transactionId: '8003257',
+        confidence: 0.97
+      })
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-proof-recipient-rut-missing',
+    from: '56911111111',
+    type: 'image',
+    text: '',
+    selectedId: null,
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    media: {
+      id: 'media-proof-recipient-rut-missing',
+      mimeType: 'image/png',
+      caption: ''
+    }
+  });
+
+  assert.equal(sentMessages[0].kind, 'buttons');
+  assert.match(sentMessages[0].bodyText, /quedo confirmada/i);
 });
 
 test('proof image rejects when destination account data is incomplete even if recipient RUT matches', async () => {

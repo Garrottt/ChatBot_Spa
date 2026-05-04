@@ -1085,18 +1085,16 @@ function resolvePaymentProofRejectionReason(booking, validation) {
 
   const expectedRecipientFormalId = normalizeFormalId(expectedRecipient.formalId);
   const detectedRecipientFormalId = normalizeFormalId(validation.recipientFormalId);
-  const recipientFormalIdMatches = Boolean(
-    expectedRecipientFormalId &&
-    detectedRecipientFormalId &&
-    expectedRecipientFormalId === detectedRecipientFormalId
-  );
-  if (!expectedRecipientFormalId || !detectedRecipientFormalId || expectedRecipientFormalId !== detectedRecipientFormalId) {
-    return 'El RUT del destinatario del comprobante no coincide con el configurado para recibir el abono.';
-  }
+  const recipientFormalIdMatches = matchesFormalId(expectedRecipientFormalId, detectedRecipientFormalId);
 
   const expectedRecipientBank = normalizeSearchText(expectedRecipient.bank);
   const detectedRecipientBank = normalizeSearchText(validation.recipientBank);
-  if (!expectedRecipientBank || !detectedRecipientBank || expectedRecipientBank !== detectedRecipientBank) {
+  const recipientBankMatches = Boolean(
+    expectedRecipientBank &&
+    detectedRecipientBank &&
+    expectedRecipientBank === detectedRecipientBank
+  );
+  if (!recipientBankMatches) {
     return 'El banco destino del comprobante no coincide con el configurado para recibir el abono.';
   }
 
@@ -1112,13 +1110,20 @@ function resolvePaymentProofRejectionReason(booking, validation) {
     alias && detectedRecipientName && personNameMatches(alias, detectedRecipientName)
   );
 
-  if (
-    !expectedRecipient.name ||
-    !detectedRecipientName ||
-    !hasStrongRecipientMatch ||
-    (!recipientNameMatches && !aliasMatches)
-  ) {
+  if (!expectedRecipient.name || !detectedRecipientName || (!recipientNameMatches && !aliasMatches)) {
     return 'El destinatario del comprobante no coincide con el titular configurado para recibir el abono.';
+  }
+
+  if (!hasStrongRecipientMatch && !recipientBankMatches) {
+    return 'El destinatario del comprobante no coincide con el titular configurado para recibir el abono.';
+  }
+
+  if (!accountNumberMatches && !recipientFormalIdMatches) {
+    return 'El destinatario del comprobante no coincide con el titular configurado para recibir el abono.';
+  }
+
+  if (!recipientFormalIdMatches && !accountNumberMatches) {
+    return 'El RUT del destinatario del comprobante no coincide con el configurado para recibir el abono.';
   }
 
   const expectedName = normalizePersonName(getExpectedPayerName(booking));
@@ -1129,7 +1134,7 @@ function resolvePaymentProofRejectionReason(booking, validation) {
   const nameProvided = Boolean(detectedName);
   const formalIdProvided = Boolean(detectedFormalId);
   const nameMatches = expectedName && detectedName && personNameMatches(expectedName, detectedName);
-  const formalIdMatches = expectedFormalId && detectedFormalId && expectedFormalId === detectedFormalId;
+  const formalIdMatches = matchesFormalId(expectedFormalId, detectedFormalId);
 
   if (nameProvided && formalIdProvided) {
     if (!nameMatches) {
@@ -1223,6 +1228,28 @@ function normalizeFormalIdLoose(value) {
     .toUpperCase()
     .replace(/[^0-9K]/g, '')
     .replace(/^0+/, '');
+}
+
+function matchesFormalId(expected, detected) {
+  if (!expected || !detected) {
+    return false;
+  }
+
+  if (expected === detected) {
+    return true;
+  }
+
+  const expectedCore = stripFormalIdCheckDigit(expected);
+  const detectedCore = stripFormalIdCheckDigit(detected);
+  return Boolean(expectedCore && detectedCore && expectedCore === detectedCore);
+}
+
+function stripFormalIdCheckDigit(value) {
+  const normalized = String(value || '').toUpperCase().replace(/[^0-9K]/g, '');
+  if (normalized.length <= 1) {
+    return '';
+  }
+  return normalized.slice(0, -1);
 }
 
 function normalizeAccountNumber(value) {
