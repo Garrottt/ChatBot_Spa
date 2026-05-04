@@ -1130,11 +1130,16 @@ function resolvePaymentProofRejectionReason(booking, validation) {
   const detectedName = normalizePersonName(validation.payerName);
   const expectedFormalId = normalizeFormalIdLoose(booking.payerFormalId || booking.client.formalId);
   const detectedFormalId = normalizeFormalIdLoose(validation.payerFormalId);
+  const detectedPayerAccountNumber = normalizeAccountNumber(validation.payerAccountNumber);
 
   const nameProvided = Boolean(detectedName);
-  const formalIdProvided = Boolean(detectedFormalId);
+  const formalIdProvided = Boolean(detectedFormalId || detectedPayerAccountNumber);
   const nameMatches = expectedName && detectedName && personNameMatches(expectedName, detectedName);
-  const formalIdMatches = matchesFormalId(expectedFormalId, detectedFormalId);
+  const formalIdMatches = matchesPayerIdentity({
+    expectedFormalId,
+    detectedFormalId,
+    detectedAccountNumber: detectedPayerAccountNumber
+  });
 
   if (nameProvided && formalIdProvided) {
     if (!nameMatches) {
@@ -1244,6 +1249,47 @@ function matchesFormalId(expected, detected) {
   return Boolean(expectedCore && detectedCore && expectedCore === detectedCore);
 }
 
+function matchesPayerIdentity({ expectedFormalId, detectedFormalId, detectedAccountNumber }) {
+  if (!expectedFormalId) {
+    return false;
+  }
+
+  if (matchesFormalId(expectedFormalId, detectedFormalId)) {
+    return true;
+  }
+
+  return matchesFormalIdAccountVariant(expectedFormalId, detectedAccountNumber);
+}
+
+function matchesFormalIdAccountVariant(expectedFormalId, accountNumber) {
+  if (!expectedFormalId || !accountNumber) {
+    return false;
+  }
+
+  const normalizedExpected = normalizeFormalIdLoose(expectedFormalId);
+  const normalizedAccount = normalizeAccountLikeFormalId(accountNumber);
+  if (!normalizedExpected || !normalizedAccount) {
+    return false;
+  }
+
+  if (normalizedExpected === normalizedAccount) {
+    return true;
+  }
+
+  const expectedCore = stripFormalIdCheckDigit(normalizedExpected);
+  const accountCore = stripFormalIdCheckDigit(normalizedAccount);
+
+  if (expectedCore && (normalizedAccount === expectedCore || accountCore === expectedCore)) {
+    return true;
+  }
+
+  if (normalizedExpected.length < normalizedAccount.length && normalizedAccount.endsWith(normalizedExpected)) {
+    return true;
+  }
+
+  return Boolean(expectedCore && expectedCore.length < normalizedAccount.length && normalizedAccount.endsWith(expectedCore));
+}
+
 function stripFormalIdCheckDigit(value) {
   const normalized = String(value || '').toUpperCase().replace(/[^0-9K]/g, '');
   if (normalized.length <= 1) {
@@ -1254,6 +1300,13 @@ function stripFormalIdCheckDigit(value) {
 
 function normalizeAccountNumber(value) {
   return String(value || '').replace(/\D/g, '');
+}
+
+function normalizeAccountLikeFormalId(value) {
+  return String(value || '')
+    .toUpperCase()
+    .replace(/[^0-9K]/g, '')
+    .replace(/^0+/, '');
 }
 
 function normalizeSearchText(value) {
@@ -1307,6 +1360,8 @@ function hasUsableProofExtraction(validation) {
   return Boolean(
     typeof validation?.detectedAmount === 'number' ||
     validation?.payerName ||
+    validation?.payerFormalId ||
+    validation?.payerAccountNumber ||
     validation?.recipientName ||
     validation?.recipientAccountNumber ||
     validation?.paymentTimestamp ||

@@ -264,6 +264,7 @@ Instrucciones:
         detectedAmount: null,
         payerName: null,
         payerFormalId: null,
+        payerAccountNumber: null,
         recipientName: null,
         recipientFormalId: null,
         recipientAccountNumber: null,
@@ -281,6 +282,7 @@ Instrucciones:
         detectedAmount: null,
         payerName: null,
         payerFormalId: null,
+        payerAccountNumber: null,
         recipientName: null,
         recipientFormalId: null,
         recipientAccountNumber: null,
@@ -297,7 +299,7 @@ Instrucciones:
         input: [
           {
             role: 'system',
-            content: 'Eres un extractor y validador estricto de comprobantes de pago. Responde SOLO JSON con forma {"isValid":boolean,"reason":"","detectedAmount":number|null,"payerName":string|null,"payerFormalId":string|null,"recipientName":string|null,"recipientFormalId":string|null,"recipientAccountNumber":string|null,"recipientBank":string|null,"paymentTimestamp":string|null,"transactionId":string|null,"confidence":0}.'
+            content: 'Eres un extractor y validador estricto de comprobantes de pago. Responde SOLO JSON con forma {"isValid":boolean,"reason":"","detectedAmount":number|null,"payerName":string|null,"payerFormalId":string|null,"payerAccountNumber":string|null,"recipientName":string|null,"recipientFormalId":string|null,"recipientAccountNumber":string|null,"recipientBank":string|null,"paymentTimestamp":string|null,"transactionId":string|null,"confidence":0}.'
           },
           {
             role: 'user',
@@ -313,6 +315,7 @@ REGLA 1 - isValid:
 REGLA 2 - Extraccion de datos:
 - payerName: nombre del pagador o titular que aparece en el comprobante. Si hay varios nombres, conserva el nombre completo tal como aparece.
 - payerFormalId: RUT o identificador si aparece visiblemente en la imagen. Si deberia estar y no aparece, devuelve null y explica el problema en reason.
+- payerAccountNumber: numero de cuenta de origen o cuenta del pagador si aparece visible. Si el comprobante no muestra RUT del pagador pero si muestra una cuenta origen que parece corresponder al RUT con ceros a la izquierda o formato bancario, extraela aqui.
 - recipientName: nombre del destinatario o titular de la cuenta destino que aparece en el comprobante.
 - recipientFormalId: RUT o identificador del destinatario si aparece visiblemente en la imagen.
 - recipientAccountNumber: numero de cuenta destino visible en el comprobante.
@@ -349,6 +352,7 @@ Datos de referencia para validar compatibilidad:
           detectedAmount: null,
           payerName: null,
           payerFormalId: null,
+          payerAccountNumber: null,
           recipientName: null,
           recipientFormalId: null,
           recipientAccountNumber: null,
@@ -365,6 +369,7 @@ Datos de referencia para validar compatibilidad:
         detectedAmount: typeof parsed.detectedAmount === 'number' ? parsed.detectedAmount : null,
         payerName: typeof parsed.payerName === 'string' ? parsed.payerName : null,
         payerFormalId: typeof parsed.payerFormalId === 'string' ? parsed.payerFormalId : null,
+        payerAccountNumber: typeof parsed.payerAccountNumber === 'string' ? parsed.payerAccountNumber : null,
         recipientName: typeof parsed.recipientName === 'string' ? parsed.recipientName : null,
         recipientFormalId: typeof parsed.recipientFormalId === 'string' ? parsed.recipientFormalId : null,
         recipientAccountNumber: typeof parsed.recipientAccountNumber === 'string' ? parsed.recipientAccountNumber : null,
@@ -381,6 +386,7 @@ Datos de referencia para validar compatibilidad:
         detectedAmount: null,
         payerName: null,
         payerFormalId: null,
+        payerAccountNumber: null,
         recipientName: null,
         recipientFormalId: null,
         recipientAccountNumber: null,

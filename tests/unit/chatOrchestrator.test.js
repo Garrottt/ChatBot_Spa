@@ -1626,6 +1626,65 @@ test('proof image accepts payer RUT even when payer name is missing', async () =
   assert.match(sentMessages[0].bodyText, /quedo confirmada/i);
 });
 
+test('proof image accepts payer origin account when it matches the expected RUT with leading zeros', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Juanito', lastName: 'Perez', formalId: '12-3' },
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'booking',
+      currentStep: 'awaiting_payment_proof',
+      collectedData: { bookingId: 'booking-1', serviceId: 'svc-1', date: '2026-05-04', time: '00:30' },
+      lastBookingId: 'booking-1'
+    },
+    bookingService: {
+      recordPaymentProofSubmission: async () => ({
+        id: 'booking-1',
+        depositAmount: 100,
+        createdAt: '2026-05-04T04:40:00.000Z',
+        holdExpiresAt: '2026-05-04T05:10:00.000Z',
+        payerFormalId: '12-3',
+        service: { name: 'Masaje relajante', currency: 'CLP' },
+        client: { name: 'Juanito', lastName: 'Perez', formalId: '12-3' }
+      })
+    },
+    openAIService: {
+      validatePaymentProof: async () => ({
+        isValid: true,
+        reason: 'ok',
+        detectedAmount: 100,
+        payerName: null,
+        payerFormalId: null,
+        payerAccountNumber: '000123',
+        recipientName: 'Gonzalo Garrote Perez',
+        recipientFormalId: '210931465',
+        recipientAccountNumber: '1020190317',
+        recipientBank: 'Mercado Pago',
+        paymentTimestamp: '2026-05-04T00:55:40-04:00',
+        transactionId: '8087755',
+        confidence: 0.97
+      })
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-proof-origin-account-rut',
+    from: '56911111111',
+    type: 'image',
+    text: '',
+    selectedId: null,
+    timestamp: String(Date.now()),
+    profileName: 'Juanito',
+    media: {
+      id: 'media-proof-origin-account-rut',
+      mimeType: 'image/png',
+      caption: ''
+    }
+  });
+
+  assert.equal(sentMessages[0].kind, 'buttons');
+  assert.match(sentMessages[0].bodyText, /quedo confirmada/i);
+});
+
 test('proof image is rejected when the destination account does not match the spa transfer account', async () => {
   const { orchestrator, sentMessages } = createDependencies({
     client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
