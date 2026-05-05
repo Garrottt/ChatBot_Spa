@@ -490,6 +490,79 @@ test('payment amount question during proof wait answers with the exact remaining
   assert.match(sentMessages[0].text, /100 CLP/i);
 });
 
+test('short payment amount question during proof wait still answers with the pending deposit', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'booking',
+      currentStep: 'awaiting_payment_proof',
+      collectedData: { bookingId: 'booking-1', serviceId: 'svc-1', date: '2026-04-30', time: '18:00' },
+      lastBookingId: 'booking-1'
+    },
+    bookingService: {
+      getBookingById: async () => ({
+        id: 'booking-1',
+        depositAmount: 100,
+        service: { name: 'Masaje de Espalda', currency: 'CLP' },
+        holdExpiresAt: '2099-04-30T23:20:00.000Z'
+      })
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-payment-amount-short',
+    from: '56911111111',
+    type: 'text',
+    text: 'y cuanto es?',
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    selectedId: null,
+    media: null
+  });
+
+  assert.equal(sentMessages[0].kind, 'text');
+  assert.match(sentMessages[0].text, /abono requerido/i);
+  assert.match(sentMessages[0].text, /100 CLP/i);
+});
+
+test('combined payment question during proof wait answers both time left and pending amount', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'booking',
+      currentStep: 'awaiting_payment_proof',
+      collectedData: { bookingId: 'booking-1', serviceId: 'svc-1', date: '2026-04-30', time: '18:00' },
+      lastBookingId: 'booking-1'
+    },
+    bookingService: {
+      getBookingById: async () => ({
+        id: 'booking-1',
+        depositAmount: 100,
+        service: { name: 'Masaje de Espalda', currency: 'CLP' },
+        holdExpiresAt: '2099-04-30T23:20:00.000Z'
+      })
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-payment-combined',
+    from: '56911111111',
+    type: 'text',
+    text: 'Cuanto tiempo me queda y cuanto es lo que debo de pagar?',
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    selectedId: null,
+    media: null
+  });
+
+  assert.equal(sentMessages[0].kind, 'text');
+  assert.match(sentMessages[0].text, /Le quedan aproximadamente/i);
+  assert.match(sentMessages[0].text, /abono requerido/i);
+  assert.match(sentMessages[0].text, /100 CLP/i);
+});
+
 test('payment destination question during proof wait returns bank details', async () => {
   const { orchestrator, sentMessages } = createDependencies({
     client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },

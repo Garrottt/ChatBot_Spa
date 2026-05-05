@@ -416,15 +416,28 @@ function createChatOrchestrator({
     }
 
     if (paymentSteps.includes(conversation.currentStep) && text && holdBooking) {
-      if (asksForTimeRemaining(lowerText)) {
+      const wantsTimeRemaining = asksForHoldTimeRemaining(lowerText);
+      const wantsPaymentAmount = asksForHoldPaymentAmount(lowerText);
+      const wantsPaymentDestination = asksForHoldPaymentDestination(lowerText);
+      const requestedTopics = [wantsTimeRemaining, wantsPaymentAmount, wantsPaymentDestination].filter(Boolean).length;
+
+      if (requestedTopics >= 2) {
+        return buildHoldCompositeReply(holdBooking, holdInfo.minutesLeft, collectedData, bookingId, {
+          wantsTimeRemaining,
+          wantsPaymentAmount,
+          wantsPaymentDestination
+        });
+      }
+
+      if (wantsTimeRemaining) {
         return buildHoldTimeReply(holdBooking, holdInfo.minutesLeft, conversation.currentStep, collectedData, bookingId);
       }
 
-      if (asksForPaymentAmount(lowerText)) {
+      if (wantsPaymentAmount) {
         return buildHoldPaymentDetailsReply(holdBooking, collectedData, bookingId);
       }
 
-      if (asksForPaymentDestination(lowerText)) {
+      if (wantsPaymentDestination) {
         return buildHoldPaymentDestinationReply(holdBooking, collectedData, bookingId);
       }
 
@@ -1382,7 +1395,29 @@ function asksForPaymentInfo(text) {
 }
 
 function asksForPaymentFollowup(text) {
-  return asksForPaymentAmount(text) || asksForPaymentDestination(text) || asksForPaymentInfo(text) || asksForTimeRemaining(text);
+  return asksForPaymentAmount(text) ||
+    asksForPaymentDestination(text) ||
+    asksForPaymentInfo(text) ||
+    asksForTimeRemaining(text) ||
+    asksForHoldPaymentAmount(text) ||
+    asksForHoldPaymentDestination(text) ||
+    asksForHoldTimeRemaining(text);
+}
+
+function asksForHoldPaymentAmount(text) {
+  const normalized = normalizeSearchText(text);
+  return asksForPaymentAmount(text) ||
+    /(cuanto es|y cuanto es|cuanto hay que pagar|cuanto debo pagar|cuanto tengo que pagar|cuanto debo abonar|cuanto tengo que abonar|cuanto falta pagar|cuanto me falta|cuanto resta|monto a pagar|valor del abono)/.test(normalized);
+}
+
+function asksForHoldPaymentDestination(text) {
+  return asksForPaymentDestination(text);
+}
+
+function asksForHoldTimeRemaining(text) {
+  const normalized = normalizeSearchText(text);
+  return asksForTimeRemaining(text) ||
+    /(cuanto tiempo me queda|cuanto me queda|cuanto tiempo queda|tiempo restante|cuantos minutos quedan|cuantos minutos me quedan)/.test(normalized);
 }
 
 function getHoldState(booking) {
@@ -1438,6 +1473,41 @@ function buildHoldPaymentInfoReply(holdBooking, minutesLeft, collectedData, book
     intent: 'booking',
     step: holdBooking.paymentStatus === 'EXPIRED' ? 'hold_expired' : 'awaiting_payment_proof',
     text: `💬 El abono es de ${totalRequired} ${currency}.\n\nPuede transferirlo a la cuenta informada y enviar aqui el comprobante.${timeText}`,
+    collectedData,
+    lastBookingId: bookingId
+  });
+}
+
+function buildHoldCompositeReply(holdBooking, minutesLeft, collectedData, bookingId, requests = {}) {
+  const partialAmountPaid = Number(collectedData.partialAmountPaid || 0);
+  const totalRequired = Number(holdBooking.depositAmount || 0);
+  const remainingAmount = Math.max(totalRequired - partialAmountPaid, 0);
+  const currency = holdBooking.service?.currency || 'CLP';
+  const minuteWord = minutesLeft === 1 ? 'minuto' : 'minutos';
+  const parts = [];
+
+  if (requests.wantsTimeRemaining) {
+    parts.push(`⏳ Le quedan aproximadamente ${minutesLeft} ${minuteWord} para enviar su comprobante y confirmar su cita.`);
+  }
+
+  if (requests.wantsPaymentAmount) {
+    const partialLine = partialAmountPaid > 0
+      ? ` Ya registra ${partialAmountPaid} ${currency} abonados, por lo que le faltan ${remainingAmount} ${currency}.`
+      : '';
+    parts.push(`💰 El abono requerido para confirmar esta reserva es de ${remainingAmount} ${currency}.${partialLine}`);
+  }
+
+  if (requests.wantsPaymentDestination) {
+    const details = String(env.spaTransferDetails || '').trim() || 'No tengo cargados los datos bancarios en este momento.';
+    parts.push(`🏦 Estos son los datos para realizar el abono:\n\n${details}`);
+  }
+
+  parts.push('Cuando realice la transferencia, envie aqui la foto o captura del comprobante para validarlo.');
+
+  return buildReply({
+    intent: 'booking',
+    step: holdBooking.paymentStatus === 'EXPIRED' ? 'hold_expired' : 'awaiting_payment_proof',
+    text: parts.join('\n\n'),
     collectedData,
     lastBookingId: bookingId
   });
