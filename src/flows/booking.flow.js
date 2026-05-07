@@ -358,6 +358,9 @@ function createBookingFlow({
       serviceId,
       scheduledAt: `${date}T${time}:00`,
       specialistId,
+      campaignId: collectedData?.campaignContext?.campaignId || null,
+      offerId: collectedData?.campaignContext?.offerId || null,
+      campaignRecipientId: collectedData?.campaignContext?.campaignRecipientId || null,
       paymentMethod,
       payer: {
         name: collectedData.payerName,

@@ -35,17 +35,48 @@ enum PaymentProofStatus {
   INVALID
 }
 
+enum OfferDiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+  CUSTOM_TEXT
+}
+
+enum CampaignStatus {
+  DRAFT
+  SENDING
+  SENT
+  PAUSED
+  CANCELLED
+  FINISHED
+}
+
+enum CampaignRecipientStatus {
+  PENDING
+  SENT
+  FAILED
+  RESPONDED
+  BOOKED
+  OPTED_OUT
+  SKIPPED
+}
+
 model Client {
   id              String         @id @default(cuid())
   whatsappNumber  String         @unique
   name            String?
   lastName        String?
   formalId        String?
+  marketingOptOut Boolean        @default(false)
+  marketingOptOutAt DateTime?
+  lastInteractionAt DateTime?
+  lastBookingAt   DateTime?
+  firstBookingAt  DateTime?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
   conversations   Conversation[]
   bookings        Booking[]
   messages        Message[]
+  campaignRecipients CampaignRecipient[]
 }
 
 model Conversation {
@@ -95,6 +126,7 @@ model Service {
   updatedAt         DateTime    @updatedAt
   bookings          Booking[]
   specialistLinks   SpecialistService[]
+  offers            Offer[]
 }
 
 model Booking {
@@ -102,6 +134,8 @@ model Booking {
   clientId            String
   serviceId           String
   specialistId        String?
+  campaignId          String?
+  offerId             String?
   status              BookingStatus   @default(PENDING)
   paymentMethod       PaymentMethod?
   paymentStatus       PaymentStatus   @default(PENDING)
@@ -115,6 +149,8 @@ model Booking {
   holdExpiresAt       DateTime?
   notes               String?
   depositAmount       Int             @default(100)
+  finalPrice          Int?
+  offerDiscountSnapshot Json?
   calendarEventId     String?
   reminderSentAt      DateTime?
   paymentProofReceivedAt DateTime?
@@ -125,8 +161,11 @@ model Booking {
   client              Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
   service             Service         @relation(fields: [serviceId], references: [id])
   specialist          Specialist?     @relation(fields: [specialistId], references: [id], onDelete: SetNull)
+  campaign            Campaign?       @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  offer               Offer?          @relation(fields: [offerId], references: [id], onDelete: SetNull)
   paymentLink         PaymentLink?
   conversations       Conversation[]  @relation("LastBooking")
+  campaignRecipients  CampaignRecipient[]
 }
 
 model Specialist {
@@ -137,6 +176,7 @@ model Specialist {
   active          Boolean             @default(true)
   workSchedule    String?
   bookings        Booking[]
+  offers          Offer[]
   serviceLinks    SpecialistService[]
   availabilities  Availability[]
 }
@@ -171,4 +211,65 @@ model PaymentLink {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   booking         Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+model Offer {
+  id                String            @id @default(cuid())
+  name              String
+  description       String
+  serviceId         String?
+  specialistId      String?
+  discountType      OfferDiscountType
+  discountValue     Int?
+  customText        String?
+  startsAt          DateTime
+  endsAt            DateTime
+  maxRedemptions    Int?
+  usedRedemptions   Int               @default(0)
+  active            Boolean           @default(true)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  service           Service?          @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  specialist        Specialist?       @relation(fields: [specialistId], references: [id], onDelete: SetNull)
+  campaigns         Campaign[]
+  bookings          Booking[]
+}
+
+model Campaign {
+  id                String                   @id @default(cuid())
+  name              String
+  objective         String
+  offerId           String
+  segmentType       String
+  segmentFilter     Json?
+  messageTemplate   String
+  status            CampaignStatus           @default(DRAFT)
+  sentAt            DateTime?
+  createdByUserId   String?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  offer             Offer                    @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  bookings          Booking[]
+  recipients        CampaignRecipient[]
+}
+
+model CampaignRecipient {
+  id                String                   @id @default(cuid())
+  campaignId        String
+  clientId          String
+  bookingId         String?
+  conversationId    String?
+  status            CampaignRecipientStatus  @default(PENDING)
+  sentAt            DateTime?
+  respondedAt       DateTime?
+  bookedAt          DateTime?
+  failedReason      String?
+  messageSnapshot   String?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  campaign          Campaign                 @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  client            Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  booking           Booking?                 @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  @@unique([campaignId, clientId])
 }

@@ -9,7 +9,7 @@ const { logger } = require('../lib/logger');
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-function createBookingService({ prisma, googleCalendar, paymentProvider, serviceCatalogService }) {
+function createBookingService({ prisma, googleCalendar, paymentProvider, serviceCatalogService, campaignService }) {
   async function quoteAvailability({ serviceId, date }) {
     const normalizedDate = String(date || '').trim();
     if (!looksLikeIsoDate(normalizedDate) || !dayjs(normalizedDate).isValid()) {
@@ -73,11 +73,11 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
     };
   }
 
-  async function createBooking({ clientId, serviceId, scheduledAt, notes, paymentMethod, payer, specialistId }) {
-    return createPendingBooking({ clientId, serviceId, scheduledAt, notes, paymentMethod, payer, specialistId });
+  async function createBooking({ clientId, serviceId, scheduledAt, notes, paymentMethod, payer, specialistId, campaignId, offerId, campaignRecipientId }) {
+    return createPendingBooking({ clientId, serviceId, scheduledAt, notes, paymentMethod, payer, specialistId, campaignId, offerId, campaignRecipientId });
   }
 
-  async function createPendingBooking({ clientId, serviceId, scheduledAt, notes, paymentMethod, payer, specialistId }) {
+  async function createPendingBooking({ clientId, serviceId, scheduledAt, notes, paymentMethod, payer, specialistId, campaignId = null, offerId = null, campaignRecipientId = null }) {
     const client = await prisma.client.findUnique({ where: { id: clientId } });
     if (!client) {
       throw new AppError('Client not found', 404);
@@ -93,6 +93,16 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
     }
 
     const service = await serviceCatalogService.getServiceById(serviceId);
+    const resolvedOffer = offerId
+      ? await campaignService.resolveBookingOffer({ offerId, service })
+      : null;
+    const offerSnapshot = resolvedOffer
+      ? {
+          ...resolvedOffer.snapshot,
+          campaignId,
+          campaignRecipientId
+        }
+      : null;
     const startAt = parseSpaScheduledAt(scheduledAt);
 
     if (!startAt.isValid()) {
@@ -146,7 +156,11 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
           holdExpiresAt: dayjs().add(env.bookingHoldMinutes, 'minute').toDate(),
           depositAmount: env.bookingDepositAmount,
           specialistId: assignedSpecialistId,
-          notes: notes || activeHold.notes || null
+          notes: notes || activeHold.notes || null,
+          campaignId: campaignId || activeHold.campaignId || null,
+          offerId: resolvedOffer?.offer.id || offerId || activeHold.offerId || null,
+          finalPrice: resolvedOffer?.snapshot.finalPrice || activeHold.finalPrice || service.price,
+          offerDiscountSnapshot: offerSnapshot || activeHold.offerDiscountSnapshot || null
         },
         include: {
           client: true,
@@ -179,12 +193,16 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
         specialistId: assignedSpecialistId,
         endAt: endAt.toDate(),
         notes: notes || null,
+        campaignId,
+        offerId: resolvedOffer?.offer.id || offerId || null,
         status: 'PENDING',
         paymentMethod,
         paymentStatus: 'PENDING',
         paymentProofStatus: 'PENDING',
         holdExpiresAt: dayjs().add(env.bookingHoldMinutes, 'minute').toDate(),
-        depositAmount: env.bookingDepositAmount
+        depositAmount: env.bookingDepositAmount,
+        finalPrice: resolvedOffer?.snapshot.finalPrice || service.price,
+        offerDiscountSnapshot: offerSnapshot || null
       },
       include: {
         client: true,
@@ -264,7 +282,8 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
       include: {
         client: true,
         service: true,
-        paymentLink: true
+        paymentLink: true,
+        offer: true
       }
     });
 
@@ -273,6 +292,13 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
     }
 
     ensurePendingBookingIsValidOrThrow(booking);
+
+    if (booking.offerId) {
+      await campaignService.resolveBookingOffer({
+        offerId: booking.offerId,
+        service: booking.service
+      });
+    }
 
     const event = await googleCalendar.createEvent({
       calendarId: booking.service.calendarId,
@@ -294,7 +320,7 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
       data: { status: 'APPROVED' }
     });
 
-    return prisma.booking.update({
+    const confirmedBooking = await prisma.booking.update({
       where: { id: bookingId },
       data: {
         status: 'CONFIRMED',
@@ -312,6 +338,37 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
         paymentLink: true
       }
     });
+
+    if (prisma.client?.update) {
+      await prisma.client.update({
+        where: { id: confirmedBooking.clientId },
+        data: {
+          lastBookingAt: confirmedBooking.scheduledAt,
+          firstBookingAt: confirmedBooking.client.firstBookingAt || confirmedBooking.scheduledAt
+        }
+      }).catch(() => null);
+    }
+
+    if (confirmedBooking.offerId) {
+      await campaignService.incrementOfferRedemption(confirmedBooking.offerId);
+    }
+
+    if (confirmedBooking.campaignId && prisma.campaignRecipient?.findFirst) {
+      const recipient = await prisma.campaignRecipient.findFirst({
+        where: confirmedBooking.offerDiscountSnapshot?.campaignRecipientId
+          ? { id: confirmedBooking.offerDiscountSnapshot.campaignRecipientId }
+          : {
+              campaignId: confirmedBooking.campaignId,
+              clientId: confirmedBooking.clientId
+            }
+      });
+
+      if (recipient) {
+        await campaignService.markRecipientBooked(recipient.id, confirmedBooking.id);
+      }
+    }
+
+    return confirmedBooking;
   }
 
   async function getBookingById(bookingId) {

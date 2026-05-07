@@ -10,6 +10,7 @@ const { createConversationService } = require('./services/conversationService');
 const { createMessageService } = require('./services/messageService');
 const { createServiceCatalogService } = require('./services/serviceCatalogService');
 const { createBookingService } = require('./services/bookingService');
+const { createCampaignService } = require('./services/campaignService');
 const { createChatOrchestrator } = require('./services/chatOrchestrator');
 const { createChatwootService } = require('./services/chatwootService');
 const { createReminderService } = require('./services/reminderService');
@@ -21,13 +22,15 @@ async function buildDependencies(overrides = {}) {
   const clientService = overrides.clientService || createClientService({ prisma });
   const conversationService = overrides.conversationService || createConversationService({ prisma });
   const messageService = overrides.messageService || createMessageService({ prisma });
+  const campaignService = overrides.campaignService || createCampaignService({ prisma });
   const googleCalendar = overrides.googleCalendar || createGoogleCalendarClient();
   const paymentProvider = overrides.paymentProvider || createPaymentProvider();
   const bookingService = overrides.bookingService || createBookingService({
     prisma,
     googleCalendar,
     paymentProvider,
-    serviceCatalogService
+    serviceCatalogService,
+    campaignService
   });
   const openAIService = overrides.openAIService || createOpenAIService();
   const metaClient = overrides.metaClient || createMetaClient();
@@ -54,6 +57,7 @@ async function buildDependencies(overrides = {}) {
     conversationService,
     messageService,
     bookingService,
+    campaignService,
     serviceCatalogService,
     paymentProvider,
     metaClient,
@@ -68,6 +72,7 @@ async function buildDependencies(overrides = {}) {
     messageService,
     serviceCatalogService,
     bookingService,
+    campaignService,
     openAIService,
     metaClient,
     chatwootClient,

@@ -103,6 +103,26 @@ function createDependencies(overrides = {}) {
       }),
       ...(overrides.bookingService || {})
     },
+    campaignService: {
+      getOfferById: async (offerId) => offerId ? ({
+        id: offerId,
+        name: 'Promo masaje',
+        discountType: 'PERCENTAGE',
+        discountValue: 20,
+        customText: null,
+        serviceId: 'svc-1',
+        specialistId: null,
+        active: true,
+        startsAt: '2026-04-01T00:00:00.000Z',
+        endsAt: '2026-06-01T00:00:00.000Z'
+      }) : null,
+      markRecipientSent: async () => ({}),
+      markRecipientFailed: async () => ({}),
+      markRecipientResponded: async () => ({}),
+      markRecipientBooked: async () => ({}),
+      markRecipientOptedOut: async () => ({}),
+      ...(overrides.campaignService || {})
+    },
     serviceCatalogService: {
       findServiceFromText: async () => null,
       getServiceById: async () => ({ id: 'svc-1', name: 'Masaje relajante', durationMinutes: 60, price: 35000, currency: 'CLP' }),
@@ -2210,4 +2230,117 @@ test('proof image with higher amount confirms booking and explains the extra cre
   assert.match(sentMessages[0].bodyText, /quedo confirmada/i);
   assert.match(sentMessages[0].bodyText, /abono 150 CLP/i);
   assert.match(sentMessages[0].bodyText, /descontaremos los 50 CLP adicionales/i);
+});
+
+test('campaign price question responds with base price, benefit and final price', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    conversation: {
+      id: 'conv-campaign-price',
+      currentIntent: 'campaign',
+      currentStep: 'answered',
+      collectedData: {
+        campaignContext: {
+          source: 'campaign',
+          campaignId: 'camp-1',
+          offerId: 'offer-1',
+          campaignRecipientId: 'recipient-1',
+          serviceId: 'svc-1'
+        }
+      },
+      lastBookingId: null
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-campaign-price',
+    from: '56911111111',
+    type: 'text',
+    text: 'cuanto sale la promo?',
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    selectedId: null,
+    media: null
+  });
+
+  assert.equal(sentMessages.at(-1).kind, 'text');
+  assert.match(sentMessages.at(-1).text, /precio base/i);
+  assert.match(sentMessages.at(-1).text, /20% de descuento/i);
+  assert.match(sentMessages.at(-1).text, /\$28\.000 CLP/i);
+});
+
+test('campaign opt-out updates client preference and clears campaign context', async () => {
+  let optedOutRecipientId = null;
+  const { orchestrator, conversation, client, sentMessages } = createDependencies({
+    conversation: {
+      id: 'conv-campaign-optout',
+      currentIntent: 'campaign',
+      currentStep: 'answered',
+      collectedData: {
+        campaignContext: {
+          source: 'campaign',
+          campaignId: 'camp-1',
+          offerId: 'offer-1',
+          campaignRecipientId: 'recipient-1',
+          serviceId: 'svc-1'
+        }
+      },
+      lastBookingId: null
+    },
+    campaignService: {
+      markRecipientOptedOut: async (recipientId) => {
+        optedOutRecipientId = recipientId;
+      }
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-campaign-optout',
+    from: '56911111111',
+    type: 'text',
+    text: 'stop',
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    selectedId: null,
+    media: null
+  });
+
+  assert.equal(client.marketingOptOut, true);
+  assert.equal(optedOutRecipientId, 'recipient-1');
+  assert.equal(conversation.collectedData?.campaignContext, undefined);
+  assert.equal(sentMessages.at(-1).kind, 'text');
+  assert.match(sentMessages.at(-1).text, /no volvera a recibir promociones/i);
+});
+
+test('campaign booking intent moves directly into the reservation flow for the campaign service', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    conversation: {
+      id: 'conv-campaign-booking',
+      currentIntent: 'campaign',
+      currentStep: 'answered',
+      collectedData: {
+        campaignContext: {
+          source: 'campaign',
+          campaignId: 'camp-1',
+          offerId: 'offer-1',
+          campaignRecipientId: 'recipient-1',
+          serviceId: 'svc-1'
+        }
+      },
+      lastBookingId: null
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-campaign-booking',
+    from: '56911111111',
+    type: 'text',
+    text: 'quiero reservar',
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    selectedId: null,
+    media: null
+  });
+
+  assert.equal(sentMessages.at(-1).kind, 'text');
+  assert.match(sentMessages.at(-1).text, /RUT o identificador/i);
 });

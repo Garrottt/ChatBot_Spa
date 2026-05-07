@@ -35,6 +35,7 @@ function createChatOrchestrator({
   conversationService,
   messageService,
   bookingService,
+  campaignService,
   serviceCatalogService,
   metaClient,
   chatwootService,
@@ -63,6 +64,9 @@ function createChatOrchestrator({
       whatsappNumber: message.from,
       name: message.profileName
     });
+    await clientService.updateClient(client.id, {
+      lastInteractionAt: new Date()
+    }).catch(() => null);
     let conversation = await conversationService.getOrCreateActiveConversation(client.id);
 
     const createdIncomingMessage = await messageService.createIncomingMessage({
@@ -207,6 +211,62 @@ function createChatOrchestrator({
     const deterministicIntent = inferDeterministicIntent(lowerText, matchedService, selectedAction);
     const resolvedIntent = deterministicIntent || intentResult.intent;
     const paymentMethod = inferPaymentMethod(text, selectedAction);
+    const campaignContext = normalizeCampaignContext(collectedData.campaignContext);
+    const campaignOffer = campaignContext?.offerId
+      ? await campaignService.getOfferById(campaignContext.offerId).catch(() => null)
+      : null;
+    const campaignServiceId = campaignContext?.serviceId || campaignOffer?.serviceId || null;
+    const campaignServiceRecord = campaignServiceId
+      ? await serviceCatalogService.getServiceById(campaignServiceId).catch(() => null)
+      : null;
+    const campaignEligibleStep = !['awaiting_payment_proof', 'payment_proof_rejected_retry', 'awaiting_partial_supplement'].includes(conversation.currentStep);
+
+    if (campaignContext?.campaignRecipientId && text && isCampaignOptOutMessage(lowerText)) {
+      await clientService.updateClient(client.id, {
+        marketingOptOut: true,
+        marketingOptOutAt: new Date()
+      }).catch(() => null);
+      await campaignService.markRecipientOptedOut(campaignContext.campaignRecipientId).catch(() => null);
+
+      return buildReply({
+        intent: 'campaign',
+        step: 'campaign_opted_out',
+        text: 'Entendido. Ya registramos su preferencia y no volvera a recibir promociones por WhatsApp.',
+        collectedData: {
+          ...collectedData,
+          campaignContext: null
+        }
+      });
+    }
+
+    if (campaignContext?.campaignRecipientId && text && !message.media) {
+      await campaignService.markRecipientResponded(campaignContext.campaignRecipientId).catch(() => null);
+    }
+
+    if (campaignContext && campaignEligibleStep && text && asksForCampaignOfferPrice(lowerText)) {
+      return buildCampaignPriceReply({
+        offer: campaignOffer,
+        service: campaignServiceRecord,
+        collectedData
+      });
+    }
+
+    if (campaignContext && campaignEligibleStep && text && (looksLikeCampaignInterest(lowerText) || resolvedIntent === 'booking')) {
+      if (campaignServiceRecord) {
+        return bookingFlow.buildServiceSelectionReply(client, campaignServiceRecord, {
+          ...collectedData,
+          serviceId: campaignServiceRecord.id
+        });
+      }
+
+      return buildReply({
+        intent: 'campaign',
+        step: 'campaign_interest',
+        text: 'Perfecto. Puedo ayudarle a reservar la promocion.\n\nSeleccione el servicio que desea revisar.',
+        collectedData,
+        outbound: await servicesFlow.createServiceListOutbound()
+      });
+    }
 
     if (wantsMainMenu(lowerText) || (selectedAction?.type === 'menu' && selectedAction.value === 'main')) {
       return welcomeFlow.buildMainMenuReply();
@@ -854,7 +914,9 @@ function createChatOrchestrator({
       intent: 'booking',
       step: 'booking_confirmed',
       text: craftedMessage,
-      collectedData: {},
+      collectedData: {
+        campaignContext: null
+      },
       lastBookingId: confirmedBooking.id,
       outbound: {
         kind: 'buttons',
@@ -1070,6 +1132,62 @@ module.exports = { createChatOrchestrator };
 
 function canStartBookingFromContext(currentStep) {
   return ['idle', 'main_menu', 'consultation_open', 'answered'].includes(currentStep || 'idle');
+}
+
+function normalizeCampaignContext(value) {
+  return value && typeof value === 'object' && value.campaignId && value.offerId
+    ? value
+    : null;
+}
+
+function isCampaignOptOutMessage(text) {
+  return /\b(stop|salir|no quiero recibir mas mensajes|no quiero recibir mensajes|no mas mensajes|baja)\b/.test(normalizeSearchText(text));
+}
+
+function looksLikeCampaignInterest(text) {
+  return /(me interesa|quiero reservar|reservar|agendar|que horarios hay|que horarios tienen|horarios disponibles|quiero esa promo|quiero la promo)/.test(normalizeSearchText(text));
+}
+
+function asksForCampaignOfferPrice(text) {
+  return /(cuanto sale|cuanto cuesta|precio|valor|descuento|promo|promocion|promoción)/.test(normalizeSearchText(text));
+}
+
+function buildCampaignPriceReply({ offer, service, collectedData }) {
+  if (!offer || !service) {
+    return buildReply({
+      intent: 'campaign',
+      step: 'campaign_price_unknown',
+      text: 'Puedo ayudarle con la promocion, pero en este momento no logre recuperar el detalle del servicio asociado.',
+      collectedData
+    });
+  }
+
+  const basePrice = Number(service.price || 0);
+  let finalPrice = basePrice;
+  let benefitLine = 'Beneficio: promocion comercial asociada.';
+
+  if (offer.discountType === 'PERCENTAGE') {
+    finalPrice = Math.max(0, basePrice - Math.round((basePrice * Number(offer.discountValue || 0)) / 100));
+    benefitLine = `Beneficio: ${offer.discountValue}% de descuento.`;
+  } else if (offer.discountType === 'FIXED_AMOUNT') {
+    finalPrice = Math.max(0, basePrice - Number(offer.discountValue || 0));
+    benefitLine = `Beneficio: descuento de $${Number(offer.discountValue || 0).toLocaleString('es-CL')} ${service.currency}.`;
+  } else if (offer.customText) {
+    benefitLine = `Beneficio: ${offer.customText}`;
+  }
+
+  return buildReply({
+    intent: 'campaign',
+    step: 'campaign_price_answered',
+    text: [
+      `✨ ${service.name}`,
+      `Precio base: $${basePrice.toLocaleString('es-CL')} ${service.currency}.`,
+      benefitLine,
+      `Precio final promocional: $${finalPrice.toLocaleString('es-CL')} ${service.currency}.`,
+      'El abono para reservar se mantiene igual que siempre y el descuento se aplica al saldo final en el spa.'
+    ].join('\n'),
+    collectedData
+  });
 }
 
 function resolvePaymentProofRejectionReason(booking, validation) {
@@ -1546,15 +1664,27 @@ function buildExpiredHoldReply(holdBooking) {
 function preserveSystemCollectedData(existingData, nextData) {
   const existing = existingData && typeof existingData === 'object' ? existingData : {};
   const next = nextData && typeof nextData === 'object' ? nextData : {};
+  const merged = {
+    ...next
+  };
 
   if (!existing.chatwoot) {
-    return nextData;
+    if (existing.campaignContext && !Object.prototype.hasOwnProperty.call(next, 'campaignContext')) {
+      merged.campaignContext = existing.campaignContext;
+    }
+  } else {
+    merged.chatwoot = existing.chatwoot;
   }
 
-  return {
-    ...next,
-    chatwoot: existing.chatwoot
-  };
+  if (existing.campaignContext && !Object.prototype.hasOwnProperty.call(next, 'campaignContext')) {
+    merged.campaignContext = existing.campaignContext;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(next, 'campaignContext') && next.campaignContext === null) {
+    delete merged.campaignContext;
+  }
+
+  return merged;
 }
 
 function formatBookingDateTime(value) {
