@@ -40,7 +40,10 @@ function createCrmRouter(dependencies) {
     }
 
     const targetNumber = conversation.client?.whatsappNumber || payload.whatsappNumber;
-    await metaClient.sendTextMessage(targetNumber, payload.content);
+    const result = await metaClient.sendTextMessage(targetNumber, payload.content);
+    if (result?.skipped) {
+      throw new AppError('WhatsApp outbound messaging is not configured in this environment.', 503);
+    }
     await messageService.createOutgoingMessage({
       conversationId: conversation.id,
       clientId: conversation.clientId,
@@ -90,7 +93,10 @@ function createCrmRouter(dependencies) {
     const targetNumber = conversation.client?.whatsappNumber || payload.whatsappNumber;
 
     try {
-      await metaClient.sendTextMessage(targetNumber, payload.message);
+      const result = await metaClient.sendTextMessage(targetNumber, payload.message);
+      if (result?.skipped) {
+        throw new AppError('WhatsApp outbound messaging is not configured in this environment.', 503);
+      }
       await messageService.createOutgoingMessage({
         conversationId: conversation.id,
         clientId: conversation.clientId,
