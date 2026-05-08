@@ -259,6 +259,12 @@ model CampaignRecipient {
   clientId          String
   bookingId         String?
   conversationId    String?
+  providerMessageId String?
+  deliveryStatus    String?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  failedAt          DateTime?
+  deliveryError     String?
   status            CampaignRecipientStatus  @default(PENDING)
   sentAt            DateTime?
   respondedAt       DateTime?

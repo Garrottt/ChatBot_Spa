@@ -105,7 +105,7 @@ function createCampaignService({ prisma }) {
     };
   }
 
-  async function markRecipientSent(recipientId, conversationId = null) {
+  async function markRecipientSent(recipientId, conversationId = null, providerMessageId = null) {
     if (!recipientId) {
       return null;
     }
@@ -115,7 +115,10 @@ function createCampaignService({ prisma }) {
       data: {
         status: 'SENT',
         sentAt: new Date(),
-        conversationId: conversationId || undefined
+        conversationId: conversationId || undefined,
+        providerMessageId: providerMessageId || undefined,
+        deliveryStatus: 'accepted',
+        deliveryError: null
       }
     });
   }
@@ -129,7 +132,10 @@ function createCampaignService({ prisma }) {
       where: { id: recipientId },
       data: {
         status: 'FAILED',
-        failedReason: failedReason || 'No se pudo enviar la campana.'
+        failedReason: failedReason || 'No se pudo enviar la campana.',
+        deliveryStatus: 'failed',
+        failedAt: new Date(),
+        deliveryError: failedReason || 'No se pudo enviar la campana.'
       }
     });
   }
@@ -208,6 +214,51 @@ function createCampaignService({ prisma }) {
     });
   }
 
+  async function markRecipientDeliveryByProviderMessageId(providerMessageId, deliveryStatus, payload = {}) {
+    if (!providerMessageId || !deliveryStatus) {
+      return null;
+    }
+
+    const recipient = await prisma.campaignRecipient.findFirst({
+      where: { providerMessageId }
+    });
+
+    if (!recipient) {
+      return null;
+    }
+
+    const normalizedStatus = String(deliveryStatus).toLowerCase();
+    const data = {
+      deliveryStatus: normalizedStatus
+    };
+
+    if (normalizedStatus === 'delivered' && !recipient.deliveredAt) {
+      data.deliveredAt = new Date();
+    }
+
+    if (normalizedStatus === 'read' && !recipient.readAt) {
+      data.readAt = new Date();
+      if (!recipient.deliveredAt) {
+        data.deliveredAt = new Date();
+      }
+    }
+
+    if (normalizedStatus === 'failed') {
+      data.failedAt = new Date();
+      data.deliveryError = formatDeliveryErrors(payload.errors);
+
+      if (!['RESPONDED', 'BOOKED', 'OPTED_OUT'].includes(recipient.status)) {
+        data.status = 'FAILED';
+        data.failedReason = data.deliveryError || 'WhatsApp no pudo entregar el mensaje.';
+      }
+    }
+
+    return prisma.campaignRecipient.update({
+      where: { id: recipient.id },
+      data
+    });
+  }
+
   return {
     getOfferById,
     getCampaignById,
@@ -220,8 +271,20 @@ function createCampaignService({ prisma }) {
     markRecipientResponded,
     markRecipientBooked,
     markRecipientOptedOut,
-    incrementOfferRedemption
+    incrementOfferRedemption,
+    markRecipientDeliveryByProviderMessageId
   };
 }
 
 module.exports = { createCampaignService };
+
+function formatDeliveryErrors(errors) {
+  if (!Array.isArray(errors) || !errors.length) {
+    return 'WhatsApp no pudo entregar el mensaje.';
+  }
+
+  return errors
+    .map((error) => error?.title || error?.message || error?.error_data?.details || error?.code)
+    .filter(Boolean)
+    .join(' | ');
+}

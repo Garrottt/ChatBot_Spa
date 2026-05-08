@@ -41,6 +41,22 @@ function createMetaClient(overrides = {}) {
     return normalized.filter(Boolean);
   }
 
+  function normalizeStatusUpdates(body) {
+    const entries = body.entry || [];
+    const normalized = [];
+
+    for (const entry of entries) {
+      for (const change of entry.changes || []) {
+        const value = change.value || {};
+        for (const status of value.statuses || []) {
+          normalized.push(normalizeStatus(status, value));
+        }
+      }
+    }
+
+    return normalized.filter(Boolean);
+  }
+
   async function sendTextMessage(to, text) {
     return sendPayload(to, {
       type: 'text',
@@ -170,6 +186,7 @@ function createMetaClient(overrides = {}) {
   return {
     verifySignature,
     normalizeMessages,
+    normalizeStatusUpdates,
     sendTextMessage,
     sendButtonsMessage,
     sendListMessage,
@@ -229,6 +246,23 @@ function normalizeMessage(message, value) {
     text: '',
     selectedId: null,
     media: null
+  };
+}
+
+function normalizeStatus(status, value) {
+  if (!status?.id || !status?.status) {
+    return null;
+  }
+
+  return {
+    providerMessageId: status.id,
+    status: status.status,
+    timestamp: status.timestamp || null,
+    recipientId: status.recipient_id || null,
+    conversation: status.conversation || null,
+    pricing: status.pricing || null,
+    errors: Array.isArray(status.errors) ? status.errors : [],
+    metadata: value.metadata || null
   };
 }
 

@@ -44,15 +44,18 @@ function createCrmRouter(dependencies) {
     if (result?.skipped) {
       throw new AppError('WhatsApp outbound messaging is not configured in this environment.', 503);
     }
+    const providerMessageId = result?.messages?.[0]?.id || null;
     await messageService.createOutgoingMessage({
       conversationId: conversation.id,
       clientId: conversation.clientId,
       content: payload.content,
+      providerId: providerMessageId,
       messageType: 'text',
       metadata: {
         intent: 'agent_reply',
         step: 'crm_manual_send',
-        source: 'crm'
+        source: 'crm',
+        providerStatus: 'accepted'
       }
     });
 
@@ -97,10 +100,12 @@ function createCrmRouter(dependencies) {
       if (result?.skipped) {
         throw new AppError('WhatsApp outbound messaging is not configured in this environment.', 503);
       }
+      const providerMessageId = result?.messages?.[0]?.id || null;
       await messageService.createOutgoingMessage({
         conversationId: conversation.id,
         clientId: conversation.clientId,
         content: payload.message,
+        providerId: providerMessageId,
         messageType: 'text',
         metadata: {
           intent: 'campaign',
@@ -108,11 +113,12 @@ function createCrmRouter(dependencies) {
           source: 'campaign',
           campaignId: payload.campaignId,
           offerId: payload.offerId,
-          campaignRecipientId: payload.campaignRecipientId
+          campaignRecipientId: payload.campaignRecipientId,
+          providerStatus: 'accepted'
         }
       });
 
-      await campaignService.markRecipientSent(payload.campaignRecipientId, conversation.id);
+      await campaignService.markRecipientSent(payload.campaignRecipientId, conversation.id, providerMessageId);
     } catch (error) {
       await campaignService.markRecipientFailed(payload.campaignRecipientId, error.message);
       throw error;
