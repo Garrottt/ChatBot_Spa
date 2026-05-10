@@ -64,6 +64,28 @@ function createMetaClient(overrides = {}) {
     });
   }
 
+  /**
+   * Sends a WhatsApp Template Message (required for proactive/campaign messages
+   * outside the 24-hour customer-initiated window).
+   *
+   * @param {string} to - Destination WhatsApp number (E.164 format, no +)
+   * @param {string} templateName - Approved template name in Meta Business Manager
+   * @param {string} languageCode - Template language code, e.g. 'es' or 'es_MX'
+   * @param {Array<{type: string, parameters: Array}>} components - Template variable components
+   */
+  async function sendTemplateMessage(to, templateName, languageCode = 'es', components = []) {
+    const payload = {
+      type: 'template',
+      template: {
+        name: templateName,
+        language: { code: languageCode },
+        components: components.length > 0 ? components : undefined
+      }
+    };
+
+    return sendPayload(to, payload);
+  }
+
   async function sendButtonsMessage(to, bodyText, buttons) {
     return sendPayload(to, {
       type: 'interactive',
@@ -188,6 +210,7 @@ function createMetaClient(overrides = {}) {
     normalizeMessages,
     normalizeStatusUpdates,
     sendTextMessage,
+    sendTemplateMessage,
     sendButtonsMessage,
     sendListMessage,
     getMediaMetadata,

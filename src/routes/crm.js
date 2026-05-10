@@ -20,7 +20,9 @@ const sendCampaignMessageSchema = z.object({
   campaignRecipientId: z.string().trim().min(1),
   message: z.string().trim().min(1),
   serviceId: z.string().trim().min(1).optional(),
-  specialistId: z.string().trim().min(1).optional()
+  specialistId: z.string().trim().min(1).optional(),
+  templateName: z.string().trim().min(1).optional(),
+  templateLanguage: z.string().trim().min(1).optional()
 });
 
 function createCrmRouter(dependencies) {
@@ -96,7 +98,27 @@ function createCrmRouter(dependencies) {
     const targetNumber = conversation.client?.whatsappNumber || payload.whatsappNumber;
 
     try {
-      const result = await metaClient.sendTextMessage(targetNumber, payload.message);
+      // Determine which template name to use: payload > env default
+      const { env } = require('../config/env');
+      const resolvedTemplateName = payload.templateName || env.metaCampaignTemplateName || null;
+      const resolvedLanguage = payload.templateLanguage || env.metaCampaignTemplateLanguage || 'es';
+
+      let result;
+      if (resolvedTemplateName) {
+        // Preferred path: send as an approved WhatsApp Template to bypass the
+        // 24-hour session window. Variables are injected as body parameters.
+        const bodyParams = buildTemplateBodyParams(payload.message);
+        result = await metaClient.sendTemplateMessage(
+          targetNumber,
+          resolvedTemplateName,
+          resolvedLanguage,
+          bodyParams
+        );
+      } else {
+        // Fallback: send as plain text (only works within a 24h session window).
+        result = await metaClient.sendTextMessage(targetNumber, payload.message);
+      }
+
       if (result?.skipped) {
         throw new AppError('WhatsApp outbound messaging is not configured in this environment.', 503);
       }
@@ -106,7 +128,7 @@ function createCrmRouter(dependencies) {
         clientId: conversation.clientId,
         content: payload.message,
         providerId: providerMessageId,
-        messageType: 'text',
+        messageType: resolvedTemplateName ? 'template' : 'text',
         metadata: {
           intent: 'campaign',
           step: 'campaign_sent',
@@ -114,6 +136,7 @@ function createCrmRouter(dependencies) {
           campaignId: payload.campaignId,
           offerId: payload.offerId,
           campaignRecipientId: payload.campaignRecipientId,
+          templateName: resolvedTemplateName || null,
           providerStatus: 'accepted'
         }
       });
@@ -133,6 +156,32 @@ function createCrmRouter(dependencies) {
 }
 
 module.exports = { createCrmRouter };
+
+/**
+ * Builds a WhatsApp template body-parameter component from a rendered message string.
+ * If your template has variables ({{1}}, {{2}}, ...) they should already be
+ * rendered in the `message` string — here we pass the whole message as a single
+ * `{{1}}` body parameter. If your template has no variables, pass an empty array.
+ *
+ * Adjust this function if your approved template uses multiple named parameters.
+ */
+function buildTemplateBodyParams(renderedMessage) {
+  if (!renderedMessage || !renderedMessage.trim()) {
+    return [];
+  }
+
+  return [
+    {
+      type: 'body',
+      parameters: [
+        {
+          type: 'text',
+          text: renderedMessage
+        }
+      ]
+    }
+  ];
+}
 
 async function resolveConversation({ payload, conversationService, clientService }) {
   if (payload.conversationId) {
