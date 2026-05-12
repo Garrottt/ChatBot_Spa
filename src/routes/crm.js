@@ -107,7 +107,8 @@ function createCrmRouter(dependencies) {
       if (resolvedTemplateName) {
         // Preferred path: send as an approved WhatsApp Template to bypass the
         // 24-hour session window. Variables are injected as body parameters.
-        const bodyParams = buildTemplateBodyParams(payload.message);
+        const headerImageUrl = env.metaCampaignTemplateHeaderImageUrl || null;
+        const bodyParams = buildTemplateBodyParams(payload.message, headerImageUrl);
         result = await metaClient.sendTemplateMessage(
           targetNumber,
           resolvedTemplateName,
@@ -158,20 +159,32 @@ function createCrmRouter(dependencies) {
 module.exports = { createCrmRouter };
 
 /**
- * Builds a WhatsApp template body-parameter component from a rendered message string.
- * If your template has variables ({{1}}, {{2}}, ...) they should already be
- * rendered in the `message` string — here we pass the whole message as a single
- * `{{1}}` body parameter. If your template has no variables, pass an empty array.
+ * Builds the WhatsApp template component array for the API call.
  *
- * Adjust this function if your approved template uses multiple named parameters.
+ * - If `imageUrl` is provided, prepends a `header` component with the image
+ *   (required when the approved template was created with an IMAGE header).
+ * - The rendered `message` is sent as the single `{{1}}` body parameter.
+ *
+ * Adjust this function if your template uses multiple body variables or
+ * additional component types (e.g. buttons with dynamic URLs).
  */
-function buildTemplateBodyParams(renderedMessage) {
-  if (!renderedMessage || !renderedMessage.trim()) {
-    return [];
+function buildTemplateBodyParams(renderedMessage, imageUrl = null) {
+  const components = [];
+
+  if (imageUrl) {
+    components.push({
+      type: 'header',
+      parameters: [
+        {
+          type: 'image',
+          image: { link: imageUrl }
+        }
+      ]
+    });
   }
 
-  return [
-    {
+  if (renderedMessage && renderedMessage.trim()) {
+    components.push({
       type: 'body',
       parameters: [
         {
@@ -179,8 +192,10 @@ function buildTemplateBodyParams(renderedMessage) {
           text: renderedMessage
         }
       ]
-    }
-  ];
+    });
+  }
+
+  return components;
 }
 
 async function resolveConversation({ payload, conversationService, clientService }) {
