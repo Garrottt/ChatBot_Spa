@@ -250,6 +250,17 @@ function normalizeMessage(message, value) {
     };
   }
 
+  // Respuesta a botón de respuesta rápida de una plantilla de WhatsApp
+  // Meta lo envía con type='button', distinto de type='interactive'
+  if (message.type === 'button') {
+    return {
+      ...common,
+      text: message.button?.text || '',
+      selectedId: null,
+      media: null
+    };
+  }
+
   if (message.type === 'image') {
     return {
       ...common,
