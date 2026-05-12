@@ -285,14 +285,9 @@ function createChatOrchestrator({
 
     if (campaignContext && campaignEligibleStep && text && (looksLikeCampaignInterest(lowerText) || resolvedIntent === 'booking')) {
       if (campaignServiceRecord) {
-        // Si el cliente ya vio el intro y escribe algo afirmativo, proceder directamente
-        if (conversation.currentStep === 'campaign_booking_intro') {
-          return bookingFlow.buildServiceSelectionReply(client, campaignServiceRecord, {
-            ...collectedData,
-            serviceId: campaignServiceRecord.id
-          });
-        }
-        // Primera respuesta: mostrar intro con beneficios y aclaración de pago
+        // Siempre mostrar el intro de campaña con beneficios y aclaración de pago.
+        // La única forma de avanzar a la reserva es con el botón "Si, reservar ahora"
+        // (acción campaignbook:confirm, manejada arriba).
         return buildCampaignBookingIntroReply({
           client,
           offer: campaignOffer,
@@ -310,6 +305,7 @@ function createChatOrchestrator({
         outbound: await servicesFlow.createServiceListOutbound()
       });
     }
+
 
     if (wantsMainMenu(lowerText) || (selectedAction?.type === 'menu' && selectedAction.value === 'main')) {
       return welcomeFlow.buildMainMenuReply();
