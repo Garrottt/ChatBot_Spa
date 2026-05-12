@@ -219,7 +219,28 @@ function createChatOrchestrator({
     const campaignServiceRecord = campaignServiceId
       ? await serviceCatalogService.getServiceById(campaignServiceId).catch(() => null)
       : null;
-    const campaignEligibleStep = !['awaiting_payment_proof', 'payment_proof_rejected_retry', 'awaiting_partial_supplement'].includes(conversation.currentStep);
+    const campaignEligibleStep = ![
+      // Pasos de reserva en progreso – el intro de campaña no debe interrumpir
+      'awaiting_service',
+      'awaiting_date',
+      'awaiting_time',
+      'awaiting_name',
+      'awaiting_last_name',
+      'awaiting_formal_id',
+      'awaiting_payer_role',
+      'awaiting_payer_confirmation',
+      'awaiting_payer_name',
+      'awaiting_payer_formal_id',
+      'awaiting_payer_email',
+      'awaiting_payment_method',
+      'editing_payer_name',
+      'editing_payer_formal_id',
+      // Pasos de pago
+      'awaiting_payment_proof',
+      'payment_proof_rejected_retry',
+      'awaiting_partial_supplement'
+    ].includes(conversation.currentStep);
+
 
     if (campaignContext?.campaignRecipientId && text && isCampaignOptOutMessage(lowerText)) {
       await clientService.updateClient(client.id, {
