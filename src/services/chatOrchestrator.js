@@ -251,11 +251,33 @@ function createChatOrchestrator({
       });
     }
 
-    if (campaignContext && campaignEligibleStep && text && (looksLikeCampaignInterest(lowerText) || resolvedIntent === 'booking')) {
+    // Cliente confirmo el intro de campaña via boton → continuar al flujo de reserva
+    if (selectedAction?.type === 'campaignbook' && selectedAction.value === 'confirm') {
       if (campaignServiceRecord) {
         return bookingFlow.buildServiceSelectionReply(client, campaignServiceRecord, {
           ...collectedData,
           serviceId: campaignServiceRecord.id
+        });
+      }
+      return bookingFlow.startBookingFlow(client, collectedData);
+    }
+
+    if (campaignContext && campaignEligibleStep && text && (looksLikeCampaignInterest(lowerText) || resolvedIntent === 'booking')) {
+      if (campaignServiceRecord) {
+        // Si el cliente ya vio el intro y escribe algo afirmativo, proceder directamente
+        if (conversation.currentStep === 'campaign_booking_intro') {
+          return bookingFlow.buildServiceSelectionReply(client, campaignServiceRecord, {
+            ...collectedData,
+            serviceId: campaignServiceRecord.id
+          });
+        }
+        // Primera respuesta: mostrar intro con beneficios y aclaración de pago
+        return buildCampaignBookingIntroReply({
+          client,
+          offer: campaignOffer,
+          service: campaignServiceRecord,
+          collectedData,
+          depositAmount: env.bookingDepositAmount
         });
       }
 
@@ -1187,6 +1209,61 @@ function buildCampaignPriceReply({ offer, service, collectedData }) {
       'El abono para reservar se mantiene igual que siempre y el descuento se aplica al saldo final en el spa.'
     ].join('\n'),
     collectedData
+  });
+}
+
+/**
+ * Muestra un mensaje introductorio cuando el cliente responde a una campaña con intención de reservar.
+ * Explica el servicio, el beneficio de la oferta y aclara que:
+ *   - El abono de reserva es el monto habitual (sin descuento)
+ *   - La promoción se aplica al SALDO TOTAL el día de la cita en el spa
+ */
+function buildCampaignBookingIntroReply({ client, offer, service, collectedData, depositAmount }) {
+  const firstName = client.name ? client.name.split(' ')[0] : null;
+  const greeting = firstName ? `Hola ${firstName}, ` : '';
+  const serviceName = service.name;
+
+  let benefitLine = `Tienes una oferta especial en ${serviceName}.`;
+  if (offer?.discountType === 'PERCENTAGE' && offer.discountValue) {
+    benefitLine = `${offer.discountValue}% de descuento en ${serviceName}.`;
+  } else if (offer?.discountType === 'FIXED_AMOUNT' && offer.discountValue) {
+    benefitLine = `$${Number(offer.discountValue).toLocaleString('es-CL')} CLP de descuento en ${serviceName}.`;
+  } else if (offer?.customText) {
+    benefitLine = offer.customText;
+  }
+
+  const lines = [
+    `${greeting}que bueno que quieres aprovechar la promo.`,
+    '',
+    `Servicio: ${serviceName}`,
+    `Beneficio: ${benefitLine}`,
+    '',
+    'Como funciona:',
+    `- Para reservar pagas el abono habitual de ${depositAmount} CLP (igual que siempre).`,
+    '- La promocion se aplica sobre el saldo total el dia de tu cita, al momento de pagar en el spa.',
+    '- No hay ningun descuento sobre el abono de reserva.',
+    '',
+    'Quieres continuar con la reserva?'
+  ];
+
+  const bodyText = lines.join('\n');
+
+  return buildReply({
+    intent: 'campaign',
+    step: 'campaign_booking_intro',
+    text: bodyText,
+    collectedData: {
+      ...collectedData,
+      serviceId: service.id
+    },
+    outbound: {
+      kind: 'buttons',
+      bodyText,
+      buttons: [
+        { id: 'campaignbook:confirm', title: 'Si, reservar ahora' },
+        { id: 'menu:main', title: 'Volver al menu' }
+      ]
+    }
   });
 }
 
