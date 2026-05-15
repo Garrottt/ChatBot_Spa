@@ -1340,7 +1340,10 @@ function resolvePaymentProofRejectionReason(booking, validation) {
   const detectedRecipientName = normalizePersonName(validation.recipientName);
   const hasStrongRecipientMatch = accountNumberMatches || recipientFormalIdMatches;
   const recipientAliases = [
-    'gonzalo garrote perez'
+    'gonzalo garrote perez',
+    'gonzalo benjamin garrote perez',
+    'gonzalo benjamin enrique',
+    'gonzalo garrote'
   ].map(normalizePersonName);
   const recipientNameMatches = expectedRecipient.name && detectedRecipientName
     ? personNameMatches(expectedRecipient.name, detectedRecipientName)
