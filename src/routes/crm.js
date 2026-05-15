@@ -94,6 +94,10 @@ function createCrmRouter(dependencies) {
         activatedAt: new Date().toISOString()
       }
     });
+    await conversationService.updateConversation(conversation.id, {
+      currentIntent: 'campaign',
+      currentStep: 'answered'
+    });
 
     const targetNumber = conversation.client?.whatsappNumber || payload.whatsappNumber;
 

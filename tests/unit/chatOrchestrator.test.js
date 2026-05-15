@@ -2346,6 +2346,41 @@ test('campaign booking intent first shows the offer summary before the reservati
   assert.match(sentMessages.at(-1).bodyText, /Quieres continuar con la reserva/i);
 });
 
+test('campaign quick reply button text "Reservar" also opens the offer intro', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    conversation: {
+      id: 'conv-campaign-button-booking',
+      currentIntent: 'campaign',
+      currentStep: 'answered',
+      collectedData: {
+        campaignContext: {
+          source: 'campaign',
+          campaignId: 'camp-1',
+          offerId: 'offer-1',
+          campaignRecipientId: 'recipient-1',
+          serviceId: 'svc-1'
+        }
+      },
+      lastBookingId: null
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-campaign-button-booking',
+    from: '56911111111',
+    type: 'button',
+    text: 'Reservar',
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    selectedId: null,
+    media: null
+  });
+
+  assert.equal(sentMessages.at(-1).kind, 'buttons');
+  assert.match(sentMessages.at(-1).bodyText, /que bueno que quieres aprovechar la promo/i);
+  assert.match(sentMessages.at(-1).bodyText, /Quieres continuar con la reserva/i);
+});
+
 test('campaign booking confirmation continues into the reservation flow instead of repeating the promo intro', async () => {
   const { orchestrator, sentMessages, conversation } = createDependencies({
     conversation: {
