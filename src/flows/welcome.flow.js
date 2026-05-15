@@ -6,7 +6,7 @@ function createWelcomeFlow() {
       intent: 'menu',
       step: 'main_menu',
       text: '🌿 Spa Ikigai Ovalle\n\nEstoy aqui para ayudarle con su reserva, servicios y consultas.',
-      collectedData: {},
+      collectedData: { campaignContext: null },
       outbound: {
         kind: 'list',
         bodyText: '🌿 *Spa Ikigai Ovalle*\n\nBienvenido/a.\nSeleccione una opcion para continuar.\n\nSi desea volver aqui en cualquier momento, escriba "volver".',

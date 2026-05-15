@@ -282,8 +282,9 @@ function createChatOrchestrator({
       }
       return bookingFlow.startBookingFlow(client, collectedData);
     }
+    const isExplicitOtherService = matchedService && campaignServiceRecord && matchedService.id !== campaignServiceRecord.id;
 
-    if (campaignContext && campaignEligibleStep && text && (looksLikeCampaignInterest(lowerText) || resolvedIntent === 'booking')) {
+    if (campaignContext && campaignEligibleStep && text && !isExplicitOtherService && (looksLikeCampaignInterest(lowerText) || resolvedIntent === 'booking')) {
       if (campaignServiceRecord) {
         // Siempre mostrar el intro de campaña con beneficios y aclaración de pago.
         // La única forma de avanzar a la reserva es con el botón "Si, reservar ahora"
@@ -316,7 +317,7 @@ function createChatOrchestrator({
     }
 
     if (selectedAction?.type === 'menu' && selectedAction.value === 'book') {
-      return bookingFlow.startBookingFlow(client, {});
+      return bookingFlow.startBookingFlow(client, { campaignContext: null });
     }
 
     if (selectedAction?.type === 'retrydates') {
@@ -324,11 +325,11 @@ function createChatOrchestrator({
     }
 
     if (selectedAction?.type === 'menu' && selectedAction.value === 'services') {
-      return servicesFlow.buildServiceListReply(collectedData);
+      return servicesFlow.buildServiceListReply({ campaignContext: null });
     }
 
     if (selectedAction?.type === 'menu' && selectedAction.value === 'consult') {
-      return faqFlow.buildConsultationWelcomeReply(collectedData);
+      return faqFlow.buildConsultationWelcomeReply({ campaignContext: null });
     }
 
     if (selectedAction?.type === 'menu' && selectedAction.value === 'manage') {
@@ -360,7 +361,7 @@ function createChatOrchestrator({
         intent: 'exit',
         step: 'main_menu',
         text: '🌿 Gracias por escribirnos.\n\nCuando quiera volver, aqui estare para ayudarle.',
-        collectedData: {}
+        collectedData: { campaignContext: null }
       });
     }
 
