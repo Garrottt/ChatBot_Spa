@@ -2311,7 +2311,7 @@ test('campaign opt-out updates client preference and clears campaign context', a
   assert.match(sentMessages.at(-1).text, /no volvera a recibir promociones/i);
 });
 
-test('campaign booking intent moves directly into the reservation flow for the campaign service', async () => {
+test('campaign booking intent first shows the offer summary before the reservation flow', async () => {
   const { orchestrator, sentMessages } = createDependencies({
     conversation: {
       id: 'conv-campaign-booking',
@@ -2341,6 +2341,42 @@ test('campaign booking intent moves directly into the reservation flow for the c
     media: null
   });
 
+  assert.equal(sentMessages.at(-1).kind, 'buttons');
+  assert.match(sentMessages.at(-1).bodyText, /abono habitual/i);
+  assert.match(sentMessages.at(-1).bodyText, /Quieres continuar con la reserva/i);
+});
+
+test('campaign booking confirmation continues into the reservation flow instead of repeating the promo intro', async () => {
+  const { orchestrator, sentMessages, conversation } = createDependencies({
+    conversation: {
+      id: 'conv-campaign-booking-confirm',
+      currentIntent: 'campaign',
+      currentStep: 'campaign_booking_intro',
+      collectedData: {
+        campaignContext: {
+          source: 'campaign',
+          campaignId: 'camp-1',
+          offerId: 'offer-1',
+          campaignRecipientId: 'recipient-1',
+          serviceId: 'svc-1'
+        }
+      },
+      lastBookingId: null
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-campaign-booking-confirm',
+    from: '56911111111',
+    type: 'text',
+    text: 'si, quiero seguir',
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    selectedId: null,
+    media: null
+  });
+
+  assert.equal(conversation.currentStep, 'awaiting_formal_id');
   assert.equal(sentMessages.at(-1).kind, 'text');
   assert.match(sentMessages.at(-1).text, /RUT o identificador/i);
 });

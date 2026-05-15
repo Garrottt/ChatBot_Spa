@@ -219,6 +219,9 @@ function createChatOrchestrator({
     const campaignServiceRecord = campaignServiceId
       ? await serviceCatalogService.getServiceById(campaignServiceId).catch(() => null)
       : null;
+    const campaignCanIntroduce = campaignContext && canStartBookingFromContext(conversation.currentStep);
+    const campaignCanContinue = campaignContext && ['campaign_booking_intro', 'campaign_interest'].includes(conversation.currentStep);
+    const campaignCanHandleText = campaignCanIntroduce || campaignCanContinue;
     const campaignEligibleStep = ![
       // Pasos de reserva en progreso – el intro de campaña no debe interrumpir
       'awaiting_service',
@@ -264,7 +267,7 @@ function createChatOrchestrator({
       await campaignService.markRecipientResponded(campaignContext.campaignRecipientId).catch(() => null);
     }
 
-    if (campaignContext && campaignEligibleStep && text && asksForCampaignOfferPrice(lowerText)) {
+    if (campaignCanHandleText && text && asksForCampaignOfferPrice(lowerText)) {
       return buildCampaignPriceReply({
         offer: campaignOffer,
         service: campaignServiceRecord,
@@ -284,11 +287,17 @@ function createChatOrchestrator({
     }
     const isExplicitOtherService = matchedService && campaignServiceRecord && matchedService.id !== campaignServiceRecord.id;
 
-    if (campaignContext && campaignEligibleStep && text && !isExplicitOtherService && (looksLikeCampaignInterest(lowerText) || resolvedIntent === 'booking')) {
+    if (campaignCanHandleText && text && !isExplicitOtherService && (looksLikeCampaignInterest(lowerText) || resolvedIntent === 'booking' || (campaignCanContinue && looksLikeCampaignBookingConfirmation(lowerText)))) {
       if (campaignServiceRecord) {
         // Siempre mostrar el intro de campaña con beneficios y aclaración de pago.
         // La única forma de avanzar a la reserva es con el botón "Si, reservar ahora"
         // (acción campaignbook:confirm, manejada arriba).
+        if (campaignCanContinue) {
+          return bookingFlow.buildServiceSelectionReply(client, campaignServiceRecord, {
+            ...collectedData,
+            serviceId: campaignServiceRecord.id
+          });
+        }
         return buildCampaignBookingIntroReply({
           client,
           offer: campaignOffer,
@@ -1186,6 +1195,10 @@ function isCampaignOptOutMessage(text) {
 
 function looksLikeCampaignInterest(text) {
   return /(me interesa|quiero reservar|reservar|agendar|que horarios hay|que horarios tienen|horarios disponibles|quiero esa promo|quiero la promo)/.test(normalizeSearchText(text));
+}
+
+function looksLikeCampaignBookingConfirmation(text) {
+  return /\b(si|sí|dale|ok|okay|confirmo|confirmar|continuar|vamos|quiero seguir)\b/.test(normalizeSearchText(text));
 }
 
 function asksForCampaignOfferPrice(text) {
