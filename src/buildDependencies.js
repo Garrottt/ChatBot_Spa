@@ -11,6 +11,7 @@ const { createMessageService } = require('./services/messageService');
 const { createServiceCatalogService } = require('./services/serviceCatalogService');
 const { createBookingService } = require('./services/bookingService');
 const { createCampaignService } = require('./services/campaignService');
+const { createAlertService } = require('./services/alertService');
 const { createChatOrchestrator } = require('./services/chatOrchestrator');
 const { createChatwootService } = require('./services/chatwootService');
 const { createReminderService } = require('./services/reminderService');
@@ -23,6 +24,7 @@ async function buildDependencies(overrides = {}) {
   const conversationService = overrides.conversationService || createConversationService({ prisma });
   const messageService = overrides.messageService || createMessageService({ prisma });
   const campaignService = overrides.campaignService || createCampaignService({ prisma });
+  const alertService = overrides.alertService || createAlertService({ prisma });
   const googleCalendar = overrides.googleCalendar || createGoogleCalendarClient();
   const paymentProvider = overrides.paymentProvider || createPaymentProvider();
   const bookingService = overrides.bookingService || createBookingService({
@@ -30,7 +32,8 @@ async function buildDependencies(overrides = {}) {
     googleCalendar,
     paymentProvider,
     serviceCatalogService,
-    campaignService
+    campaignService,
+    alertService
   });
   const openAIService = overrides.openAIService || createOpenAIService();
   const metaClient = overrides.metaClient || createMetaClient();
@@ -58,6 +61,7 @@ async function buildDependencies(overrides = {}) {
     messageService,
     bookingService,
     campaignService,
+    alertService,
     serviceCatalogService,
     paymentProvider,
     metaClient,
@@ -73,6 +77,7 @@ async function buildDependencies(overrides = {}) {
     serviceCatalogService,
     bookingService,
     campaignService,
+    alertService,
     openAIService,
     metaClient,
     chatwootClient,

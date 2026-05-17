@@ -9,7 +9,7 @@ const { logger } = require('../lib/logger');
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-function createBookingService({ prisma, googleCalendar, paymentProvider, serviceCatalogService, campaignService }) {
+function createBookingService({ prisma, googleCalendar, paymentProvider, serviceCatalogService, campaignService, alertService }) {
   async function quoteAvailability({ serviceId, date }) {
     const normalizedDate = String(date || '').trim();
     if (!looksLikeIsoDate(normalizedDate) || !dayjs(normalizedDate).isValid()) {
@@ -135,6 +135,7 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
       include: {
         client: true,
         service: true,
+        specialist: true,
         paymentLink: true
       }
     });
@@ -282,6 +283,7 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
       include: {
         client: true,
         service: true,
+        specialist: true,
         paymentLink: true,
         offer: true
       }
@@ -335,6 +337,7 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
       include: {
         client: true,
         service: true,
+        specialist: true,
         paymentLink: true
       }
     });
@@ -367,6 +370,13 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
         await campaignService.markRecipientBooked(recipient.id, confirmedBooking.id);
       }
     }
+
+    await alertService?.createBookingConfirmedAlert?.(confirmedBooking).catch((error) => {
+      logger.warn('Booking confirmed alert could not be created', {
+        bookingId: confirmedBooking.id,
+        error: error.message
+      });
+    });
 
     return confirmedBooking;
   }
@@ -402,6 +412,7 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
       include: {
         client: true,
         service: true,
+        specialist: true,
         paymentLink: true
       }
     });
@@ -445,7 +456,7 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
       }
     });
 
-    return prisma.booking.update({
+    const cancelledBooking = await prisma.booking.update({
       where: { id: bookingId },
       data: {
         status: 'CANCELLED',
@@ -455,9 +466,19 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
       include: {
         client: true,
         service: true,
+        specialist: true,
         paymentLink: true
       }
     });
+
+    await alertService?.createBookingCancelledAlert?.(cancelledBooking, 'chatbot').catch((error) => {
+      logger.warn('Booking cancelled alert could not be created', {
+        bookingId: cancelledBooking.id,
+        error: error.message
+      });
+    });
+
+    return cancelledBooking;
   }
 
   async function expirePendingBookings(referenceDate = new Date()) {

@@ -123,6 +123,12 @@ function createDependencies(overrides = {}) {
       markRecipientOptedOut: async () => ({}),
       ...(overrides.campaignService || {})
     },
+    alertService: {
+      createHumanRequestAlert: async () => ({}),
+      createBookingConfirmedAlert: async () => ({}),
+      createBookingCancelledAlert: async () => ({}),
+      ...(overrides.alertService || {})
+    },
     serviceCatalogService: {
       findServiceFromText: async () => null,
       getServiceById: async () => ({ id: 'svc-1', name: 'Masaje relajante', durationMinutes: 60, price: 35000, currency: 'CLP' }),
@@ -1375,6 +1381,38 @@ test('manual takeover prevents automatic replies while still storing the incomin
   assert.equal(incomingSaved, 1);
   assert.equal(touched, 1);
   assert.equal(sentMessages.length, 0);
+});
+
+test('human request pauses the bot and creates an alert for the CRM', async () => {
+  let alertCreated = false;
+  const { orchestrator, conversation, sentMessages } = createDependencies({
+    alertService: {
+      createHumanRequestAlert: async ({ client, conversation: alertedConversation, messageText }) => {
+        alertCreated = true;
+        assert.equal(client.id, 'client-1');
+        assert.equal(alertedConversation.id, 'conv-1');
+        assert.match(messageText, /persona/i);
+      }
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-human-request',
+    from: '56911111111',
+    type: 'text',
+    text: 'quiero hablar con una persona',
+    timestamp: String(Date.now()),
+    profileName: 'Gonza',
+    selectedId: null,
+    media: null
+  });
+
+  assert.equal(alertCreated, true);
+  assert.equal(conversation.botPaused, true);
+  assert.equal(conversation.takenOverByAgent, true);
+  assert.equal(conversation.currentIntent, 'human_request');
+  assert.equal(conversation.currentStep, 'awaiting_agent');
+  assert.match(sentMessages[0].text, /equipo del spa/i);
 });
 
 test('stale manual takeover is auto-resumed and the bot replies again', async () => {

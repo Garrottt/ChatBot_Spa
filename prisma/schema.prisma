@@ -11,6 +11,7 @@ datasource db {
 enum BookingStatus {
   PENDING
   CONFIRMED
+  COMPLETED
   CANCELLED
 }
 
@@ -278,4 +279,22 @@ model CampaignRecipient {
   booking           Booking?                 @relation(fields: [bookingId], references: [id], onDelete: SetNull)
 
   @@unique([campaignId, clientId])
+}
+
+model Alert {
+  id              String    @id @default(cuid())
+  eventKey        String    @unique
+  type            String
+  title           String
+  body            String
+  recipientUserId BigInt?
+  recipientRole   String?
+  clientId        String?
+  bookingId       String?
+  conversationId  String?
+  actionUrl       String?
+  metadata        Json?
+  readAt          DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }

@@ -36,6 +36,7 @@ function createChatOrchestrator({
   messageService,
   bookingService,
   campaignService,
+  alertService,
   serviceCatalogService,
   metaClient,
   chatwootService,
@@ -243,6 +244,35 @@ function createChatOrchestrator({
       'payment_proof_rejected_retry',
       'awaiting_partial_supplement'
     ].includes(conversation.currentStep);
+
+    if (text && isHumanRequestMessage(lowerText)) {
+      const pausedConversation = await conversationService.updateConversation(conversation.id, {
+        botPaused: true,
+        takenOverByAgent: true,
+        takenOverAt: new Date(),
+        currentIntent: 'human_request',
+        currentStep: 'awaiting_agent'
+      });
+
+      await alertService?.createHumanRequestAlert?.({
+        client,
+        conversation: pausedConversation,
+        messageText: text
+      }).catch((error) => {
+        logger.warn('Human request alert could not be created', {
+          conversationId: conversation.id,
+          clientId: client.id,
+          error: error.message
+        });
+      });
+
+      return buildReply({
+        intent: 'human_request',
+        step: 'awaiting_agent',
+        text: 'Claro. Deje avisado al equipo del spa para que una persona pueda revisar su caso y responderle por este mismo chat.',
+        collectedData
+      });
+    }
 
 
     if (campaignContext?.campaignRecipientId && text && isCampaignOptOutMessage(lowerText)) {
@@ -1218,6 +1248,10 @@ function normalizeCampaignContext(value) {
 
 function isCampaignOptOutMessage(text) {
   return /\b(stop|salir|no quiero recibir mas mensajes|no quiero recibir mensajes|no mas mensajes|baja)\b/.test(normalizeSearchText(text));
+}
+
+function isHumanRequestMessage(text) {
+  return /\b(humano|asesor|asesora|ejecutivo|ejecutiva|agente|operador|alguien del spa|hablar con alguien|hablar con una persona|persona real|quiero hablar con una persona|quiero ayuda humana|necesito ayuda humana)\b/.test(normalizeSearchText(text));
 }
 
 function looksLikeCampaignInterest(text) {
