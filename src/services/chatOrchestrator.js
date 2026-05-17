@@ -1415,16 +1415,18 @@ function resolvePaymentProofRejectionReason(booking, validation) {
   }
 
   if (paymentTimestamp && paymentTimestamp.isValid()) {
-    // El timestamp ya viene en UTC gracias a parsePaymentTimestamp (asume -04:00 si falta offset).
+    // El timestamp se compara como instante absoluto, pero siempre se muestra en hora local del spa.
     const windowStartsAt = dayjs(booking.createdAt);
     const windowEndsAt = booking.holdExpiresAt ? dayjs(booking.holdExpiresAt) : null;
+    const allowedWindowStartsAt = windowStartsAt.subtract(5, 'minute');
+    const paymentTimeLabel = formatSpaTime(paymentTimestamp);
 
-    if (paymentTimestamp.isBefore(windowStartsAt)) {
-      return `La hora del pago no coincide con la ventana valida de la reserva. El comprobante muestra ${paymentTimestamp.format('HH:mm')} y el pago fue realizado antes de crear la reserva.`;
+    if (paymentTimestamp.isBefore(allowedWindowStartsAt)) {
+      return `La hora del pago no coincide con la ventana valida de la reserva. El comprobante muestra ${paymentTimeLabel} y el pago fue realizado antes de crear la reserva.`;
     }
 
     if (windowEndsAt && paymentTimestamp.isAfter(windowEndsAt)) {
-      return `La hora del pago no coincide con la ventana valida de la reserva. El comprobante muestra ${paymentTimestamp.format('HH:mm')} y el limite era ${windowEndsAt.format('HH:mm')}.`;
+      return `La hora del pago no coincide con la ventana valida de la reserva. El comprobante muestra ${paymentTimeLabel} y el limite era ${formatSpaTime(windowEndsAt)}.`;
     }
   }
 
@@ -1582,6 +1584,15 @@ function parsePaymentTimestamp(value) {
 
   const parsed = dayjs(withOffset);
   return parsed.isValid() ? parsed : null;
+}
+
+function formatSpaTime(value) {
+  const parsed = dayjs(value);
+  if (!parsed.isValid()) {
+    return '';
+  }
+
+  return parsed.tz(env.googleTimezone || 'America/Santiago').format('HH:mm');
 }
 
 function splitFullName(value) {

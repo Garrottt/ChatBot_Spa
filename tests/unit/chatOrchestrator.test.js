@@ -2049,6 +2049,122 @@ test('proof image is rejected when payment time is outside the allowed hold wind
   assert.match(sentMessages[0].text, /hora del pago no coincide/i);
 });
 
+test('proof image accepts payment a few minutes before the technical booking creation time', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Kevin', lastName: 'Irigoyen Martinez', formalId: '21572672K' },
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'booking',
+      currentStep: 'awaiting_payment_proof',
+      collectedData: { bookingId: 'booking-1', serviceId: 'svc-1', date: '2026-05-17', time: '00:30' },
+      lastBookingId: 'booking-1'
+    },
+    bookingService: {
+      recordPaymentProofSubmission: async () => ({
+        id: 'booking-1',
+        depositAmount: 100,
+        createdAt: '2026-05-17T04:20:00.000Z',
+        holdExpiresAt: '2026-05-17T04:30:00.000Z',
+        service: { name: 'Masaje relajante', currency: 'CLP' },
+        client: { name: 'Kevin', lastName: 'Irigoyen Martinez', formalId: '21572672K' }
+      })
+    },
+    openAIService: {
+      validatePaymentProof: async () => ({
+        isValid: true,
+        reason: 'ok',
+        detectedAmount: 100,
+        payerName: 'Kevin Yair Irigoyen Martinez',
+        payerFormalId: '21.572.672-K',
+        payerAccountNumber: '1055844603',
+        recipientName: 'Gonzalo Benjamin Enrique Garrote Perez',
+        recipientFormalId: '21.093.146-5',
+        recipientAccountNumber: '1020190317',
+        recipientBank: 'Mercado Pago',
+        paymentTimestamp: '2026-05-17T00:19:00-04:00',
+        transactionId: '158910632091',
+        confidence: 0.98
+      })
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-proof-before-creation-grace',
+    from: '56911111111',
+    type: 'image',
+    text: '',
+    selectedId: null,
+    timestamp: String(Date.now()),
+    profileName: 'Kevin',
+    media: {
+      id: 'media-proof-before-creation-grace',
+      mimeType: 'image/png',
+      caption: ''
+    }
+  });
+
+  assert.equal(sentMessages[0].kind, 'buttons');
+  assert.match(sentMessages[0].bodyText, /quedo confirmada/i);
+});
+
+test('payment time rejection message uses the spa local time instead of UTC', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Kevin', lastName: 'Irigoyen Martinez', formalId: '21572672K' },
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'booking',
+      currentStep: 'awaiting_payment_proof',
+      collectedData: { bookingId: 'booking-1', serviceId: 'svc-1', date: '2026-05-17', time: '00:30' },
+      lastBookingId: 'booking-1'
+    },
+    bookingService: {
+      recordPaymentProofSubmission: async () => ({
+        id: 'booking-1',
+        depositAmount: 100,
+        createdAt: '2026-05-17T04:30:00.000Z',
+        holdExpiresAt: '2026-05-17T04:40:00.000Z',
+        service: { name: 'Masaje relajante', currency: 'CLP' },
+        client: { name: 'Kevin', lastName: 'Irigoyen Martinez', formalId: '21572672K' }
+      })
+    },
+    openAIService: {
+      validatePaymentProof: async () => ({
+        isValid: true,
+        reason: 'ok',
+        detectedAmount: 100,
+        payerName: 'Kevin Yair Irigoyen Martinez',
+        payerFormalId: '21.572.672-K',
+        recipientName: 'Gonzalo Benjamin Enrique Garrote Perez',
+        recipientFormalId: '21.093.146-5',
+        recipientAccountNumber: '1020190317',
+        recipientBank: 'Mercado Pago',
+        paymentTimestamp: '2026-05-17T00:19:00-04:00',
+        transactionId: '158910632091',
+        confidence: 0.98
+      })
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-proof-local-time-message',
+    from: '56911111111',
+    type: 'image',
+    text: '',
+    selectedId: null,
+    timestamp: String(Date.now()),
+    profileName: 'Kevin',
+    media: {
+      id: 'media-proof-local-time-message',
+      mimeType: 'image/png',
+      caption: ''
+    }
+  });
+
+  assert.equal(sentMessages[0].kind, 'text');
+  assert.match(sentMessages[0].text, /muestra 00:19/i);
+  assert.doesNotMatch(sentMessages[0].text, /04:19/i);
+});
+
 test('proof image accepts receipts without visible RUT when amount, name and time are consistent', async () => {
   const { orchestrator, sentMessages } = createDependencies({
     client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza Gonza', lastName: 'Perez', formalId: '210931468' },
