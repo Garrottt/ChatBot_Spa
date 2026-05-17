@@ -1558,7 +1558,7 @@ test('booking status question without reservations offers management alternative
   assert.equal(sentMessages[0].buttons[0].id, 'menu:book');
 });
 
-test('proof image is rejected when the payer name does not match the reservation data', async () => {
+test('proof image accepts a different payer when the destination account is trusted', async () => {
   const { orchestrator, sentMessages } = createDependencies({
     client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
     conversation: {
@@ -1573,10 +1573,11 @@ test('proof image is rejected when the payer name does not match the reservation
         isValid: true,
         reason: 'ok',
         detectedAmount: 100,
-        payerName: 'Otra Persona',
-        payerFormalId: '210931468',
-        recipientName: 'Gonzalo Benjamin Enrique Garrote Perez',
-        recipientFormalId: '210931465',
+        payerName: 'Gonzalo Benjamin Enrique Garrote Perez',
+        payerFormalId: null,
+        payerAccountNumber: '19841193252',
+        recipientName: 'Gonzalo benjamín enrique',
+        recipientFormalId: null,
         recipientAccountNumber: '1020190317',
         recipientBank: 'Mercado Pago',
         paymentTimestamp: '2026-04-15T09:05:00-03:00',
@@ -1601,11 +1602,11 @@ test('proof image is rejected when the payer name does not match the reservation
     }
   });
 
-  assert.equal(sentMessages[0].kind, 'text');
-  assert.match(sentMessages[0].text, /nombre del comprobante no coincide/i);
+  assert.equal(sentMessages[0].kind, 'buttons');
+  assert.match(sentMessages[0].bodyText, /quedo confirmada/i);
 });
 
-test('proof image with missing payer name is rejected under strict validation', async () => {
+test('proof image with missing payer name is accepted when the destination account is trusted', async () => {
   const { orchestrator, sentMessages } = createDependencies({
     client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Gonza', lastName: 'Perez', formalId: '210931468' },
     conversation: {
@@ -1658,8 +1659,8 @@ test('proof image with missing payer name is rejected under strict validation', 
     }
   });
 
-  assert.equal(sentMessages[0].kind, 'text');
-  assert.match(sentMessages[0].text, /nombre o el RUT del pagador/i);
+  assert.equal(sentMessages[0].kind, 'buttons');
+  assert.match(sentMessages[0].bodyText, /quedo confirmada/i);
 });
 
 test('proof image accepts payer RUT even when payer name is missing', async () => {

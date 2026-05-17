@@ -1351,6 +1351,11 @@ function resolvePaymentProofRejectionReason(booking, validation) {
   const aliasMatches = recipientAliases.some((alias) =>
     alias && detectedRecipientName && personNameMatches(alias, detectedRecipientName)
   );
+  const recipientDestinationTrusted = Boolean(
+    accountNumberMatches &&
+    recipientBankMatches &&
+    (recipientNameMatches || aliasMatches || recipientFormalIdMatches)
+  );
 
   if (!expectedRecipient.name || !detectedRecipientName || (!recipientNameMatches && !aliasMatches)) {
     return 'El destinatario del comprobante no coincide con el titular configurado para recibir el abono.';
@@ -1383,23 +1388,25 @@ function resolvePaymentProofRejectionReason(booking, validation) {
     detectedAccountNumber: detectedPayerAccountNumber
   });
 
-  if (nameProvided && formalIdProvided) {
-    if (!nameMatches) {
-      return 'El nombre del comprobante no coincide con los datos personales entregados para la reserva.';
+  if (!recipientDestinationTrusted) {
+    if (nameProvided && formalIdProvided) {
+      if (!nameMatches) {
+        return 'El nombre del comprobante no coincide con los datos personales entregados para la reserva.';
+      }
+      if (!formalIdMatches) {
+        return 'El RUT o identificador del comprobante no coincide con el registrado en la reserva.';
+      }
+    } else if (nameProvided) {
+      if (!nameMatches) {
+        return 'El nombre del comprobante no coincide con los datos personales entregados para la reserva.';
+      }
+    } else if (formalIdProvided) {
+      if (!formalIdMatches) {
+        return 'El RUT o identificador del comprobante no coincide con el registrado en la reserva.';
+      }
+    } else {
+      return 'No se pudo leer el nombre o el RUT del pagador en el comprobante.';
     }
-    if (!formalIdMatches) {
-      return 'El RUT o identificador del comprobante no coincide con el registrado en la reserva.';
-    }
-  } else if (nameProvided) {
-    if (!nameMatches) {
-      return 'El nombre del comprobante no coincide con los datos personales entregados para la reserva.';
-    }
-  } else if (formalIdProvided) {
-    if (!formalIdMatches) {
-      return 'El RUT o identificador del comprobante no coincide con el registrado en la reserva.';
-    }
-  } else {
-    return 'No se pudo leer el nombre o el RUT del pagador en el comprobante.';
   }
 
   const paymentTimestamp = parsePaymentTimestamp(validation.paymentTimestamp);

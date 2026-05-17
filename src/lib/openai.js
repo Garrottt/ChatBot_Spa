@@ -310,7 +310,8 @@ Instrucciones:
 
 REGLA 1 - isValid:
 - isValid=true: solo si la imagen parece un comprobante o captura real de un pago y los datos visibles son compatibles con la reserva.
-- isValid=false: si la imagen no parece un comprobante real, si el monto no coincide, si el pagador no coincide, si el RUT esperado no coincide o no aparece cuando deberia aparecer, o si la fecha/hora visible cae fuera de la ventana esperada.
+- isValid=false: si la imagen no parece un comprobante real, si el monto no coincide, si la cuenta/banco/destinatario destino no coinciden con los datos esperados, o si la fecha/hora visible cae fuera de la ventana esperada.
+- El pagador/origen puede ser distinto al cliente registrado, porque un tercero puede realizar el abono. No rechaces solo por diferencia de pagador si el destino, monto, fecha y transaccion son compatibles.
 
 REGLA 2 - Extraccion de datos:
 - payerName: nombre del pagador o titular que aparece en el comprobante. Si hay varios nombres, conserva el nombre completo tal como aparece.
@@ -329,6 +330,7 @@ Datos de referencia para validar compatibilidad:
 - Pagador esperado: ${expectedPayerName || 'No disponible'}
 - RUT esperado: ${expectedFormalId || 'No disponible'}
 - Destinatario esperado: ${expectedRecipientName || 'No disponible'}
+- Alias validos del destinatario: Gonzalo Benjamin Garrote Perez, Gonzalo Benjamin Enrique, Gonzalo Garrote
 - RUT destinatario esperado: ${expectedRecipientFormalId || 'No disponible'}
 - Cuenta destino esperada: ${expectedRecipientAccountNumber || 'No disponible'}
 - Banco destino esperado: ${expectedRecipientBank || 'No disponible'}
