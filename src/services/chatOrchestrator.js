@@ -851,13 +851,40 @@ function createChatOrchestrator({
     const usedTransactionIds = Array.isArray(collectedData.usedTransactionIds)
       ? collectedData.usedTransactionIds
       : [];
-    const incomingTxId = validation.transactionId;
+    const incomingTxId = normalizePaymentTransactionId(validation.transactionId);
 
     if (incomingTxId && usedTransactionIds.includes(incomingTxId)) {
       return buildReply({
         intent: 'booking',
         step: 'awaiting_partial_supplement',
         text: `⚠️ Este comprobante (Nº de Solicitud ${incomingTxId}) ya fue recibido anteriormente y no puede usarse nuevamente.\n\nPor favor envie el comprobante de la transferencia adicional que realizo.`,
+        collectedData: {
+          ...collectedData,
+          bookingId
+        },
+        lastBookingId: bookingId
+      });
+    }
+
+    const reusedProofBooking = incomingTxId && bookingService.findBookingByPaymentTransactionId
+      ? await bookingService.findBookingByPaymentTransactionId(incomingTxId, bookingId)
+      : null;
+
+    if (reusedProofBooking) {
+      const reusedServiceName = reusedProofBooking.service?.name || 'otra reserva';
+      const reason = `Este comprobante ya fue usado para confirmar una reserva de ${reusedServiceName}.`;
+      await bookingService.rejectPaymentProof(bookingId, {
+        proofMetadata,
+        validation: {
+          ...validation,
+          reason
+        }
+      });
+
+      return buildReply({
+        intent: 'booking',
+        step: 'payment_proof_rejected_retry',
+        text: `⚠️ Este comprobante (N° de Solicitud ${incomingTxId}) ya fue usado para confirmar una reserva de ${reusedServiceName}.\n\nPara confirmar esta nueva reserva, debe enviar el comprobante de una nueva transferencia.`,
         collectedData: {
           ...collectedData,
           bookingId
@@ -1418,7 +1445,7 @@ function resolvePaymentProofRejectionReason(booking, validation) {
     // El timestamp se compara como instante absoluto, pero siempre se muestra en hora local del spa.
     const windowStartsAt = dayjs(booking.createdAt);
     const windowEndsAt = booking.holdExpiresAt ? dayjs(booking.holdExpiresAt) : null;
-    const allowedWindowStartsAt = windowStartsAt.subtract(5, 'minute');
+    const allowedWindowStartsAt = windowStartsAt.subtract(2, 'minute');
     const paymentTimeLabel = formatSpaTime(paymentTimestamp);
 
     if (paymentTimestamp.isBefore(allowedWindowStartsAt)) {
@@ -1551,6 +1578,10 @@ function stripFormalIdCheckDigit(value) {
 
 function normalizeAccountNumber(value) {
   return String(value || '').replace(/\D/g, '');
+}
+
+function normalizePaymentTransactionId(value) {
+  return String(value || '').trim();
 }
 
 function normalizeAccountLikeFormalId(value) {

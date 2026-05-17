@@ -371,6 +371,31 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
     return confirmedBooking;
   }
 
+  async function findBookingByPaymentTransactionId(transactionId, excludedBookingId = null) {
+    const normalizedTransactionId = normalizePaymentTransactionId(transactionId);
+    if (!normalizedTransactionId) {
+      return null;
+    }
+
+    return prisma.booking.findFirst({
+      where: {
+        ...(excludedBookingId ? { id: { not: excludedBookingId } } : {}),
+        paymentProofStatus: 'VALID',
+        paymentProofValidation: {
+          path: ['transactionId'],
+          equals: normalizedTransactionId
+        }
+      },
+      include: {
+        client: true,
+        service: true
+      },
+      orderBy: {
+        paymentProofReceivedAt: 'desc'
+      }
+    });
+  }
+
   async function getBookingById(bookingId) {
     return prisma.booking.findUnique({
       where: { id: bookingId },
@@ -759,6 +784,7 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
     recordPaymentProofSubmission,
     rejectPaymentProof,
     confirmPendingBooking,
+    findBookingByPaymentTransactionId,
     getBookingById,
     cancelBooking,
     expirePendingBookings,
@@ -766,6 +792,10 @@ function createBookingService({ prisma, googleCalendar, paymentProvider, service
     ensurePaymentLink,
     reconcileCalendarEvents
   };
+}
+
+function normalizePaymentTransactionId(value) {
+  return String(value || '').trim();
 }
 
 function ensurePendingBookingIsValidOrThrow(booking) {

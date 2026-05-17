@@ -2049,6 +2049,78 @@ test('proof image is rejected when payment time is outside the allowed hold wind
   assert.match(sentMessages[0].text, /hora del pago no coincide/i);
 });
 
+test('proof image rejects a transaction id already used by another booking', async () => {
+  let rejectedBookingId = null;
+  const { orchestrator, sentMessages } = createDependencies({
+    client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Kevin', lastName: 'Irigoyen Martinez', formalId: '21572672K' },
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'booking',
+      currentStep: 'awaiting_payment_proof',
+      collectedData: { bookingId: 'booking-2', serviceId: 'svc-1', date: '2026-05-17', time: '01:00' },
+      lastBookingId: 'booking-2'
+    },
+    bookingService: {
+      recordPaymentProofSubmission: async () => ({
+        id: 'booking-2',
+        depositAmount: 100,
+        createdAt: '2026-05-17T04:35:00.000Z',
+        holdExpiresAt: '2026-05-17T04:45:00.000Z',
+        service: { name: 'Masaje relajante', currency: 'CLP' },
+        client: { name: 'Kevin', lastName: 'Irigoyen Martinez', formalId: '21572672K' }
+      }),
+      findBookingByPaymentTransactionId: async (transactionId, excludedBookingId) => {
+        assert.equal(transactionId, '849170243000');
+        assert.equal(excludedBookingId, 'booking-2');
+        return {
+          id: 'booking-1',
+          service: { name: 'Limpieza facial profunda' }
+        };
+      },
+      rejectPaymentProof: async (bookingId) => {
+        rejectedBookingId = bookingId;
+      }
+    },
+    openAIService: {
+      validatePaymentProof: async () => ({
+        isValid: true,
+        reason: 'ok',
+        detectedAmount: 100,
+        payerName: 'Gonzalo Benjamin Enrique Garrote Perez',
+        payerFormalId: null,
+        payerAccountNumber: '19841193252',
+        recipientName: 'Gonzalo benjamín enrique',
+        recipientFormalId: null,
+        recipientAccountNumber: '1020190317',
+        recipientBank: 'Mercado Pago',
+        paymentTimestamp: '2026-05-17T00:34:45-04:00',
+        transactionId: '849170243000',
+        confidence: 0.98
+      })
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-proof-reused-transaction',
+    from: '56911111111',
+    type: 'image',
+    text: '',
+    selectedId: null,
+    timestamp: String(Date.now()),
+    profileName: 'Kevin',
+    media: {
+      id: 'media-proof-reused-transaction',
+      mimeType: 'image/png',
+      caption: ''
+    }
+  });
+
+  assert.equal(rejectedBookingId, 'booking-2');
+  assert.equal(sentMessages[0].kind, 'text');
+  assert.match(sentMessages[0].text, /ya fue usado para confirmar una reserva/i);
+  assert.match(sentMessages[0].text, /nueva transferencia/i);
+});
+
 test('proof image accepts payment a few minutes before the technical booking creation time', async () => {
   const { orchestrator, sentMessages } = createDependencies({
     client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Kevin', lastName: 'Irigoyen Martinez', formalId: '21572672K' },
@@ -2105,6 +2177,64 @@ test('proof image accepts payment a few minutes before the technical booking cre
 
   assert.equal(sentMessages[0].kind, 'buttons');
   assert.match(sentMessages[0].bodyText, /quedo confirmada/i);
+});
+
+test('proof image rejects payment five minutes before the technical booking creation time', async () => {
+  const { orchestrator, sentMessages } = createDependencies({
+    client: { id: 'client-1', whatsappNumber: '56911111111', name: 'Kevin', lastName: 'Irigoyen Martinez', formalId: '21572672K' },
+    conversation: {
+      id: 'conv-1',
+      currentIntent: 'booking',
+      currentStep: 'awaiting_payment_proof',
+      collectedData: { bookingId: 'booking-1', serviceId: 'svc-1', date: '2026-05-17', time: '00:30' },
+      lastBookingId: 'booking-1'
+    },
+    bookingService: {
+      recordPaymentProofSubmission: async () => ({
+        id: 'booking-1',
+        depositAmount: 100,
+        createdAt: '2026-05-17T04:30:00.000Z',
+        holdExpiresAt: '2026-05-17T04:40:00.000Z',
+        service: { name: 'Masaje relajante', currency: 'CLP' },
+        client: { name: 'Kevin', lastName: 'Irigoyen Martinez', formalId: '21572672K' }
+      })
+    },
+    openAIService: {
+      validatePaymentProof: async () => ({
+        isValid: true,
+        reason: 'ok',
+        detectedAmount: 100,
+        payerName: 'Kevin Yair Irigoyen Martinez',
+        payerFormalId: '21.572.672-K',
+        recipientName: 'Gonzalo Benjamin Enrique Garrote Perez',
+        recipientFormalId: '21.093.146-5',
+        recipientAccountNumber: '1020190317',
+        recipientBank: 'Mercado Pago',
+        paymentTimestamp: '2026-05-17T00:25:00-04:00',
+        transactionId: '158910632092',
+        confidence: 0.98
+      })
+    }
+  });
+
+  await orchestrator.handleIncomingMessage({
+    providerMessageId: 'wamid-proof-too-early',
+    from: '56911111111',
+    type: 'image',
+    text: '',
+    selectedId: null,
+    timestamp: String(Date.now()),
+    profileName: 'Kevin',
+    media: {
+      id: 'media-proof-too-early',
+      mimeType: 'image/png',
+      caption: ''
+    }
+  });
+
+  assert.equal(sentMessages[0].kind, 'text');
+  assert.match(sentMessages[0].text, /muestra 00:25/i);
+  assert.match(sentMessages[0].text, /antes de crear la reserva/i);
 });
 
 test('payment time rejection message uses the spa local time instead of UTC', async () => {
