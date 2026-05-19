@@ -12,7 +12,7 @@ function createPaymentProvider(overrides = {}) {
       : null
   );
 
-  async function createPaymentLink({ bookingId, amount, currency = 'CLP', description = 'Reserva Spa Ikigai Ovalle' }) {
+  async function createPaymentLink({ bookingId, amount, currency = 'CLP', description = `Reserva ${env.spaName}` }) {
     if (!preferenceClient) {
       return {
         provider: env.paymentProviderName,
@@ -81,7 +81,7 @@ function createPaymentProvider(overrides = {}) {
 }
 
 function normalizeStatementDescriptor(value) {
-  return String(value || 'SPA IKIGAI')
+  return String(value || 'SPA LA ROCA')
     .normalize('NFD')
     .replace(/[^\w\s]/g, '')
     .replace(/[\u0300-\u036f]/g, '')

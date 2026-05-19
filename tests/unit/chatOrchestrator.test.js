@@ -1115,7 +1115,7 @@ test('main menu uses interactive list with spa options', async () => {
 
   assert.equal(sentMessages[0].kind, 'list');
   assert.equal(sentMessages[0].sections[0].rows.length, 5);
-  assert.match(sentMessages[0].bodyText, /Spa Ikigai Ovalle/i);
+  assert.match(sentMessages[0].bodyText, /Spa La Roca/i);
 });
 
 test('consultation menu opens free-form spa questions instead of answering with a fixed card', async () => {

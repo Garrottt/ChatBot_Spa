@@ -5,7 +5,7 @@ const { createPaymentProvider, normalizeStatementDescriptor } = require('../../s
 const { AppError } = require('../../src/lib/errors');
 
 test('normalizeStatementDescriptor formats spa name for Mercado Pago', () => {
-  assert.equal(normalizeStatementDescriptor('Spa Ikigai Ovalle'), 'SPA IKIGAI OV');
+  assert.equal(normalizeStatementDescriptor('Spa La Roca'), 'SPA LA ROCA');
 });
 
 test('payment provider creates Mercado Pago link using booking amount', async () => {

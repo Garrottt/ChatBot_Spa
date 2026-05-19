@@ -4,7 +4,7 @@ const { env } = require('../config/env');
 const { logger } = require('../lib/logger');
 
 function buildExpiredHoldButtonsText(booking) {
-  return `⌛ Su tiempo para confirmar la cita de *${booking.service.name}* ya finalizo y el horario fue liberado.`;
+  return `Su tiempo para confirmar la cita de *${booking.service.name}* ya finalizo y el horario fue liberado.`;
 }
 
 function createReminderService({
@@ -13,7 +13,6 @@ function createReminderService({
   messageService,
   conversationService
 }) {
-  // ─── Recordatorio de cita (24h antes) ────────────────────────────────────
   async function runPendingReminders(referenceDate = new Date()) {
     const now = dayjs(referenceDate);
     const threshold = now.add(env.bookingReminderHours, 'hour');
@@ -38,7 +37,7 @@ function createReminderService({
     let sent = 0;
 
     for (const booking of bookings) {
-      const text = `📅 Recordatorio de cita\n\nTiene ${booking.service.name} agendado para el ${dayjs(booking.scheduledAt).format('YYYY-MM-DD HH:mm')}.\n\nSi necesita ayuda o desea cancelar, puede responder a este chat.`;
+      const text = `Recordatorio de cita\n\nTiene ${booking.service.name} agendado para el ${dayjs(booking.scheduledAt).format('YYYY-MM-DD HH:mm')}.\n\nSi necesita ayuda o desea cancelar, puede responder a este chat.`;
       await metaClient.sendTextMessage(booking.client.whatsappNumber, text);
 
       const conversation = await conversationService.getOrCreateActiveConversation(booking.clientId);
@@ -69,12 +68,9 @@ function createReminderService({
     return { sent };
   }
 
-  // ─── Aviso de 5 minutos restantes ────────────────────────────────────────
   async function runHoldWarnings(referenceDate = new Date()) {
     const now = dayjs(referenceDate);
 
-    // Ventana de 1 minuto centrada en los 5 minutos restantes.
-    // Con un poll de 60s, cada booking entrara a esta ventana exactamente una vez.
     const windowStart = now.add(4, 'minute').add(30, 'second');
     const windowEnd = now.add(5, 'minute').add(30, 'second');
 
@@ -93,7 +89,7 @@ function createReminderService({
 
     for (const booking of bookings) {
       const expiresAt = dayjs(booking.holdExpiresAt).subtract(4, 'hour').format('HH:mm');
-      const text = `⏳ *Aviso importante*\n\nLe quedan aproximadamente *5 minutos* para enviar su comprobante de pago y confirmar su cita de *${booking.service.name}*.\n\nSi no recibimos el comprobante antes de las ${expiresAt}, el horario sera liberado automaticamente.`;
+      const text = `Aviso importante\n\nLe quedan aproximadamente *5 minutos* para enviar su comprobante de pago y confirmar su cita de *${booking.service.name}*.\n\nSi no recibimos el comprobante antes de las ${expiresAt}, el horario sera liberado automaticamente.`;
 
       try {
         await metaClient.sendTextMessage(booking.client.whatsappNumber, text);
@@ -121,11 +117,9 @@ function createReminderService({
     return { sent };
   }
 
-  // ─── Notificacion de expiración + expirar booking ────────────────────────
   async function runHoldExpiryNotifications(referenceDate = new Date()) {
     const now = dayjs(referenceDate);
 
-    // Encontrar bookings PENDING que ya superaron su holdExpiresAt
     const expiredBookings = await prisma.booking.findMany({
       where: {
         status: 'PENDING',
@@ -141,7 +135,7 @@ function createReminderService({
       const text = buildExpiredHoldButtonsText(booking);
 
       try {
-        await metaClient.sendButtonsMessage(booking.client.whatsappNumber, `${text}\n\n¿Que desea hacer ahora?`, [
+        await metaClient.sendButtonsMessage(booking.client.whatsappNumber, `${text}\n\nQue desea hacer ahora?`, [
           { id: 'menu:main', title: 'Menu principal' },
           { id: 'menu:book', title: 'Reservar otro servicio' }
         ]);
@@ -174,7 +168,6 @@ function createReminderService({
       }
     }
 
-    // Expirar todos los bookings encontrados
     if (expiredBookings.length > 0) {
       await prisma.booking.updateMany({
         where: {

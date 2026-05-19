@@ -5,7 +5,7 @@ function createFaqFlow({ openAIService, serviceCatalogService }) {
     return buildReply({
       intent: 'faq',
       step: 'consultation_open',
-      text: '💬 Puede hacerme cualquier pregunta sobre el spa.\n\nEstoy aqui para ayudarle con servicios, horarios, reservas, pagos y mas.',
+      text: 'Puede hacerme cualquier pregunta sobre el spa.\n\nEstoy aqui para ayudarle con servicios, horarios, reservas, pagos o cualquier otra duda antes de agendar.',
       collectedData
     });
   }
@@ -19,7 +19,7 @@ function createFaqFlow({ openAIService, serviceCatalogService }) {
     const outbound = service
       ? {
           kind: 'buttons',
-          bodyText: `${text}\n\n¿Que desea hacer con ${service.name}?`,
+          bodyText: `${text}\n\nQue desea hacer con ${service.name}?`,
           buttons: [
             { id: `bookservice:${service.id}`, title: 'Reservar' },
             { id: `askservice:${service.id}`, title: 'Otra consulta' }
@@ -38,8 +38,8 @@ function createFaqFlow({ openAIService, serviceCatalogService }) {
 
   async function buildFaqReply(topic, collectedData) {
     const textByTopic = {
-      horarios: 'cuales son los horarios del spa',
-      ubicacion: 'donde se encuentra el spa',
+      horarios: 'cuales son los horarios del centro',
+      ubicacion: 'donde se encuentra el centro',
       servicios: 'que servicios ofrecen',
       contacto: 'cual es el telefono de contacto',
       politicas: 'cual es la politica de cancelacion',

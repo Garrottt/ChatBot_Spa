@@ -269,7 +269,7 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'human_request',
         step: 'awaiting_agent',
-        text: 'Claro. Deje avisado al equipo del spa para que una persona pueda revisar su caso y responderle por este mismo chat.',
+        text: 'Claro. Ya avise al equipo del spa para que una persona pueda revisar su caso y responderle por este mismo chat.',
         collectedData
       });
     }
@@ -340,7 +340,7 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'campaign',
         step: 'campaign_interest',
-        text: 'Perfecto. Puedo ayudarle a reservar la promocion.\n\nSeleccione el servicio que desea revisar.',
+        text: 'Perfecto. Le ayudo a reservar la promocion.\n\nSeleccione el servicio que desea revisar.',
         collectedData,
         outbound: await servicesFlow.createServiceListOutbound()
       });
@@ -399,7 +399,7 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'exit',
         step: 'main_menu',
-        text: '🌿 Gracias por escribirnos.\n\nCuando quiera volver, aqui estare para ayudarle.',
+        text: 'Gracias por escribirnos.\n\nCuando quiera volver, escriba "volver" y le muestro el menu principal.',
         collectedData: { campaignContext: null }
       });
     }
@@ -417,7 +417,7 @@ function createChatOrchestrator({
         return buildReply({
           intent: 'cancel_booking',
           step: 'cancel_booking_missing',
-          text: 'No encontre una reserva activa con esa opcion.\n\nSi quiere, puedo mostrarle sus proximas citas.',
+        text: 'No encontre una reserva activa con esa opcion.\n\nSi desea, puedo mostrarle sus proximas citas.',
           collectedData
         });
       }
@@ -425,11 +425,11 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'cancel_booking',
         step: 'awaiting_cancel_confirmation',
-        text: `⚠️ Esta a punto de cancelar su cita.\n\nServicio: ${selectedBooking.service.name}\nFecha: ${formatBookingDateTime(selectedBooking.scheduledAt)}\n\n¿Desea confirmar la cancelacion?`,
+        text: `Esta a punto de cancelar su cita.\n\nServicio: ${selectedBooking.service.name}\nFecha: ${formatBookingDateTime(selectedBooking.scheduledAt)}\n\nDesea confirmar la cancelacion?`,
         collectedData,
         outbound: {
           kind: 'buttons',
-          bodyText: `⚠️ Confirmar cancelacion de ${selectedBooking.service.name}\n${formatBookingDateTime(selectedBooking.scheduledAt)}`,
+        bodyText: `Confirmar cancelacion de ${selectedBooking.service.name}\n${formatBookingDateTime(selectedBooking.scheduledAt)}`,
           buttons: [
             { id: `cancelconfirm:${selectedBooking.id}`, title: 'Si, cancelar' },
             { id: 'menu:main', title: 'Volver' }
@@ -449,7 +449,7 @@ function createChatOrchestrator({
       const wasPaid = cancelledBooking.paymentStatus === 'APPROVED';
       const baseText = `✅ Su cita de ${cancelledBooking.service.name} para el ${formatBookingDateTime(cancelledBooking.scheduledAt)} fue cancelada correctamente.`;
       const refundNote = wasPaid
-        ? `\n\nComo ya habia realizado un abono para esta reserva, el equipo del spa se pondra en contacto con usted a la brevedad para solicitar sus datos bancarios y gestionar la devolucion del monto abonado.`
+        ? `\n\nComo ya habia realizado un abono para esta reserva, el equipo se pondra en contacto con usted para coordinar la devolucion del monto abonado.`
         : '';
 
       return buildReply({
@@ -480,7 +480,7 @@ function createChatOrchestrator({
         return buildReply({
           intent: 'booking',
           step: 'awaiting_service',
-          text: '🗓️ Elija uno de nuestros servicios para continuar con la reserva.',
+          text: 'Elija uno de nuestros servicios para continuar con la reserva.',
           collectedData,
           outbound: await servicesFlow.createServiceListOutbound()
         });
@@ -495,7 +495,7 @@ function createChatOrchestrator({
         return buildReply({
           intent: 'booking',
           step: 'awaiting_service',
-          text: '💆 Elija uno de nuestros servicios para ver su detalle.',
+          text: 'Elija uno de nuestros servicios para ver su detalle.',
           collectedData,
           outbound: await servicesFlow.createServiceListOutbound()
         });
@@ -512,7 +512,7 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'booking',
         step: 'awaiting_service',
-        text: '😅 No encontre ese servicio.\n\nPor favor elija uno de la lista.',
+        text: 'No encontre ese servicio.\n\nPor favor elija uno de la lista.',
         collectedData,
         outbound: await servicesFlow.createServiceListOutbound()
       });
@@ -525,7 +525,7 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'faq',
         step: 'faq_context',
-        text: `💬 Claro.\n\n¿Que desea saber sobre ${serviceName}?\nPuede escribirme su duda y con gusto le respondo.`,
+        text: `Claro.\n\nQue desea saber sobre ${serviceName}?\nPuede escribirme su duda y le respondo con la informacion disponible.`,
         collectedData: {
           ...collectedData,
           serviceId: selectedAction.value
@@ -587,7 +587,7 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'booking',
         step: conversation.currentStep,
-        text: '⏳ Su reserva sigue activa.\n\nPuede consultarme el monto, la cuenta o el tiempo restante, o enviar aqui la foto o captura del comprobante para confirmarlo.',
+        text: 'Su reserva sigue activa.\n\nPuede consultarme el monto, los datos de pago o el tiempo restante. Tambien puede enviar aqui la foto o captura del comprobante para confirmar.',
         collectedData,
         lastBookingId: bookingId
       });
@@ -599,7 +599,7 @@ function createChatOrchestrator({
         return buildReply({
           intent: 'booking',
           step: 'awaiting_name',
-          text: '👤 Para continuar con la reserva, necesito su nombre y apellidos completos.',
+          text: 'Para continuar con la reserva, necesito su nombre y apellidos completos.',
           collectedData
         });
       }
@@ -610,7 +610,7 @@ function createChatOrchestrator({
         return buildReply({
           intent: 'booking',
           step: 'awaiting_formal_id',
-          text: '🪪 Perfecto.\n\nAhora necesito su RUT o identificador antes de mostrarle fechas disponibles.',
+          text: 'Perfecto.\n\nAhora necesito su RUT o identificador antes de mostrarle fechas disponibles.',
           collectedData
         });
       }
@@ -632,7 +632,7 @@ function createChatOrchestrator({
         return buildReply({
           intent: 'booking',
           step: 'awaiting_formal_id',
-          text: '🪪 Perfecto.\n\nAhora necesito su RUT o identificador antes de mostrarle fechas disponibles.',
+          text: 'Perfecto.\n\nAhora necesito su RUT o identificador antes de mostrarle fechas disponibles.',
           collectedData
         });
       }
@@ -658,7 +658,7 @@ function createChatOrchestrator({
         return buildReply({
           intent: 'booking',
           step: 'editing_payer_name',
-          text: '👤 Necesito su nombre y apellidos completos para actualizar el registro.',
+          text: 'Necesito su nombre y apellidos completos para actualizar el registro.',
           collectedData
         });
       }
@@ -667,7 +667,7 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'booking',
         step: 'editing_payer_formal_id',
-        text: '✅ Nombre actualizado.\n\nAhora indique su RUT o identificador para corregirlo.',
+        text: 'Nombre actualizado.\n\nAhora indique su RUT o identificador para corregirlo.',
         collectedData: {
           ...collectedData,
           payerName: fullName.name,
@@ -691,7 +691,7 @@ function createChatOrchestrator({
         return buildReply({
           intent: 'booking',
           step: 'awaiting_payer_name',
-          text: '👤 Perfecto.\n\nIndique el nombre y apellidos de la persona que realizara el pago.',
+          text: 'Perfecto.\n\nIndique el nombre y apellidos de la persona que realizara el pago.',
           collectedData: {
             ...collectedData,
             payerName: null,
@@ -711,7 +711,7 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'booking',
         step: 'editing_payer_name',
-        text: '👤 Entendido.\n\nIndique su nombre y apellidos completos para actualizarlos.',
+        text: 'Entendido.\n\nIndique su nombre y apellidos completos para actualizarlos.',
         collectedData
       });
     }
@@ -722,7 +722,7 @@ function createChatOrchestrator({
         return buildReply({
           intent: 'booking',
           step: 'awaiting_payer_name',
-          text: '👤 Necesito el nombre y apellidos completos de la persona que realizara el pago.',
+          text: 'Necesito el nombre y apellidos completos de la persona que realizara el pago.',
           collectedData
         });
       }
@@ -730,7 +730,7 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'booking',
         step: 'awaiting_payer_formal_id',
-        text: '🪪 Gracias.\n\nAhora indique el RUT o identificador de la persona que realizara el pago.',
+        text: 'Gracias.\n\nAhora indique el RUT o identificador de la persona que realizara el pago.',
         collectedData: {
           ...collectedData,
           payerName: fullName.name,
@@ -743,7 +743,7 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'booking',
         step: 'awaiting_payer_email',
-        text: '📧 Perfecto.\n\nAhora necesito el correo electronico de la persona que realizara el pago.',
+        text: 'Perfecto.\n\nAhora necesito el correo electronico de la persona que realizara el pago.',
         collectedData: {
           ...collectedData,
           payerFormalId: text.trim()
@@ -770,7 +770,7 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'booking',
         step: conversation.currentStep,
-        text: '📸 Para validar el abono, necesito que envie una foto o captura del comprobante dentro del tiempo indicado. Tambien puede preguntarme el monto o los datos de la cuenta.',
+        text: 'Para validar el abono, envie una foto o captura del comprobante dentro del tiempo indicado. Tambien puede preguntarme el monto o los datos de la cuenta.',
         collectedData,
         lastBookingId: conversation.lastBookingId || collectedData.bookingId || null
       });
@@ -781,7 +781,7 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'booking',
         step: 'awaiting_service',
-        text: '🗓️ Elija uno de nuestros servicios para continuar con la reserva.',
+        text: 'Elija uno de nuestros servicios para continuar con la reserva.',
         collectedData,
         outbound: await servicesFlow.createServiceListOutbound()
       });
@@ -887,7 +887,7 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'booking',
         step: 'awaiting_partial_supplement',
-        text: `⚠️ Este comprobante (Nº de Solicitud ${incomingTxId}) ya fue recibido anteriormente y no puede usarse nuevamente.\n\nPor favor envie el comprobante de la transferencia adicional que realizo.`,
+        text: `Este comprobante (Nº de Solicitud ${incomingTxId}) ya fue recibido anteriormente y no puede usarse nuevamente.\n\nPor favor envie el comprobante de una nueva transferencia.`,
         collectedData: {
           ...collectedData,
           bookingId
@@ -914,7 +914,7 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'booking',
         step: 'payment_proof_rejected_retry',
-        text: `⚠️ Este comprobante (N° de Solicitud ${incomingTxId}) ya fue usado para confirmar una reserva de ${reusedServiceName}.\n\nPara confirmar esta nueva reserva, debe enviar el comprobante de una nueva transferencia.`,
+        text: `Este comprobante (N° de Solicitud ${incomingTxId}) ya fue usado para confirmar una reserva de ${reusedServiceName}.\n\nPara confirmar esta nueva reserva, debe enviar el comprobante de una nueva transferencia.`,
         collectedData: {
           ...collectedData,
           bookingId
@@ -937,7 +937,7 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'booking',
         step: 'payment_proof_rejected_retry',
-        text: `⚠️ No pude validar el comprobante.\n\nMotivo: ${reason}\n\nPuede reenviar una foto o captura mas clara mientras el horario siga reservado.`,
+        text: `No pude validar el comprobante.\n\nMotivo: ${reason}\n\nPuede reenviar una foto o captura mas clara mientras el horario siga reservado.`,
         collectedData: {
           ...collectedData,
           bookingId
@@ -968,7 +968,7 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'booking',
         step: 'awaiting_partial_supplement',
-        text: `💡 ${partialText}\n\nLe faltan ${stillNeeded} ${booking.service.currency} para confirmar su hora.\n\nPuede elegir una de estas opciones:\n\n1. Transferir los ${stillNeeded} ${booking.service.currency} restantes y enviar ese comprobante dentro del tiempo disponible.\n\n2. Transferir nuevamente el total de ${booking.depositAmount} ${booking.service.currency}. Lo que ya abono (${newPartialTotal} ${booking.service.currency}) sera descontado del pago final al llegar al spa.`,
+        text: `${partialText}\n\nLe faltan ${stillNeeded} ${booking.service.currency} para confirmar su hora.\n\nPuede elegir una de estas opciones:\n\n1. Transferir los ${stillNeeded} ${booking.service.currency} restantes y enviar ese comprobante dentro del tiempo disponible.\n\n2. Transferir nuevamente el total de ${booking.depositAmount} ${booking.service.currency}. Lo que ya abono (${newPartialTotal} ${booking.service.currency}) sera descontado del pago final al llegar al centro.`,
         collectedData: {
           ...collectedData,
           bookingId,
@@ -991,9 +991,9 @@ function createChatOrchestrator({
       : 0;
 
     const scheduledAtLocal = formatBookingDateTime(confirmedBooking.scheduledAt);
-    const baseFallback = `Su cita para ${confirmedBooking.service.name} quedo confirmada para el ${scheduledAtLocal}. Su pago fue validado correctamente y ya dejamos su hora reservada.`;
+    const baseFallback = `Su cita para ${confirmedBooking.service.name} quedo confirmada para el ${scheduledAtLocal}. Validamos correctamente su abono y dejamos su horario reservado.`;
     const overpaymentNote = overpaidAmount > 0
-      ? ` Notamos que en total abono ${totalPaidByClient} ${confirmedBooking.service.currency} (abono requerido: ${confirmedBooking.depositAmount} ${confirmedBooking.service.currency}). Conserve sus comprobantes: al llegar al spa le descontaremos los ${overpaidAmount} ${confirmedBooking.service.currency} adicionales del pago final.`
+      ? ` Notamos que en total abono ${totalPaidByClient} ${confirmedBooking.service.currency} (abono requerido: ${confirmedBooking.depositAmount} ${confirmedBooking.service.currency}). Conserve sus comprobantes: al llegar al centro descontaremos los ${overpaidAmount} ${confirmedBooking.service.currency} adicionales del pago final.`
       : (partialAmountPaid > 0 ? ` La suma de sus abonos cubre el total requerido.` : '');
     const fallbackMessage = `${baseFallback}${overpaymentNote}`;
 
@@ -1026,7 +1026,7 @@ function createChatOrchestrator({
       lastBookingId: confirmedBooking.id,
       outbound: {
         kind: 'buttons',
-        bodyText: `${craftedMessage}\n\n¿Desea realizar otra gestion?`,
+        bodyText: `${craftedMessage}\n\nDesea realizar otra gestion?`,
         buttons: [
           { id: 'menu:book', title: 'Nueva reserva' },
           { id: 'menu:manage', title: 'Ver reservas' },
@@ -1043,11 +1043,11 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'manage_bookings',
         step: 'manage_bookings_empty',
-        text: '📭 No encuentro reservas proximas activas en este momento.',
+        text: 'No encuentro reservas proximas activas en este momento.',
         collectedData: {},
         outbound: {
           kind: 'buttons',
-          bodyText: '📭 No hay reservas activas para gestionar.',
+          bodyText: 'No hay reservas activas para gestionar.',
           buttons: [
             { id: 'menu:book', title: 'Reservar cita' },
             { id: 'menu:main', title: 'Volver' }
@@ -1059,11 +1059,11 @@ function createChatOrchestrator({
     return buildReply({
       intent: 'manage_bookings',
       step: 'manage_bookings_menu',
-      text: '📌 Estas son las opciones disponibles para sus reservas activas.',
+      text: 'Estas son las opciones disponibles para sus reservas activas.',
       collectedData: {},
       outbound: {
         kind: 'buttons',
-        bodyText: `📌 Tiene ${upcomingBookings.length} reserva${upcomingBookings.length === 1 ? '' : 's'} activa${upcomingBookings.length === 1 ? '' : 's'}.\n\n¿Que desea hacer?`,
+        bodyText: `Tiene ${upcomingBookings.length} reserva${upcomingBookings.length === 1 ? '' : 's'} activa${upcomingBookings.length === 1 ? '' : 's'}.\n\nQue desea hacer?`,
         buttons: [
           { id: 'manage:view', title: 'Ver reservas' },
           { id: 'manage:cancel', title: 'Cancelar cita' },
@@ -1087,11 +1087,11 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'manage_bookings',
         step: 'viewing_bookings',
-        text: `📅 Su proxima reserva es para ${booking.service.name} el ${scheduledAt}.`,
+        text: `Su proxima reserva es para ${booking.service.name} el ${scheduledAt}.`,
         collectedData: {},
         outbound: {
           kind: 'buttons',
-          bodyText: `📅 Su proxima reserva\n${booking.service.name}\n${scheduledAt}`,
+          bodyText: `Su proxima reserva\n${booking.service.name}\n${scheduledAt}`,
           buttons: [
             { id: 'manage:cancel', title: 'Cancelar cita' },
             { id: 'menu:main', title: 'Volver' }
@@ -1110,11 +1110,11 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'manage_bookings',
         step: 'manage_bookings_empty',
-        text: '📭 No encuentro reservas proximas activas en este momento.',
+        text: 'No encuentro reservas proximas activas en este momento.',
         collectedData: {},
         outbound: {
           kind: 'buttons',
-          bodyText: '📭 No hay reservas activas para mostrar.',
+          bodyText: 'No hay reservas activas para mostrar.',
           buttons: [
             { id: 'menu:book', title: 'Reservar cita' },
             { id: 'menu:main', title: 'Volver' }
@@ -1131,11 +1131,11 @@ function createChatOrchestrator({
     return buildReply({
       intent: 'manage_bookings',
       step: 'viewing_bookings',
-      text: `📅 Estas son sus proximas reservas:\n\n${summary}`,
+      text: `Estas son sus proximas reservas:\n\n${summary}`,
       collectedData: {},
       outbound: {
         kind: 'buttons',
-        bodyText: `📅 Estas son sus proximas reservas:\n\n${summary}`,
+        bodyText: `Estas son sus proximas reservas:\n\n${summary}`,
         buttons: [
           { id: 'manage:cancel', title: 'Cancelar cita' },
           { id: 'menu:main', title: 'Volver' }
@@ -1151,7 +1151,7 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'cancel_booking',
         step: 'cancel_booking_empty',
-        text: '📭 No encuentro reservas proximas confirmadas para cancelar.',
+        text: 'No encuentro reservas proximas confirmadas para cancelar.',
         collectedData: {}
       });
     }
@@ -1161,11 +1161,11 @@ function createChatOrchestrator({
       return buildReply({
         intent: 'cancel_booking',
         step: 'awaiting_cancel_confirmation',
-        text: `⚠️ Encontre una reserva.\n\nServicio: ${booking.service.name}\nFecha: ${formatBookingDateTime(booking.scheduledAt)}\n\n¿Desea cancelarla?`,
+        text: `Encontre una reserva.\n\nServicio: ${booking.service.name}\nFecha: ${formatBookingDateTime(booking.scheduledAt)}\n\nDesea cancelarla?`,
         collectedData: {},
         outbound: {
           kind: 'buttons',
-          bodyText: `⚠️ Reserva encontrada\n${booking.service.name}\n${formatBookingDateTime(booking.scheduledAt)}`,
+          bodyText: `Reserva encontrada\n${booking.service.name}\n${formatBookingDateTime(booking.scheduledAt)}`,
           buttons: [
             { id: `cancelconfirm:${booking.id}`, title: 'Si, cancelar' },
             { id: 'menu:main', title: 'Volver' }
@@ -1177,11 +1177,11 @@ function createChatOrchestrator({
     return buildReply({
       intent: 'cancel_booking',
       step: 'select_booking_to_cancel',
-      text: '⚠️ Estas son sus proximas reservas confirmadas.\n\nElija cual quiere cancelar.',
+      text: 'Estas son sus proximas reservas confirmadas.\n\nElija cual quiere cancelar.',
       collectedData: {},
       outbound: {
         kind: 'list',
-        bodyText: '⚠️ Seleccione la cita que desea cancelar.',
+        bodyText: 'Seleccione la cita que desea cancelar.',
         buttonText: 'Ver reservas',
         sections: [
           {
@@ -1294,11 +1294,11 @@ function buildCampaignPriceReply({ offer, service, collectedData }) {
     intent: 'campaign',
     step: 'campaign_price_answered',
     text: [
-      `✨ ${service.name}`,
+      service.name,
       `Precio base: $${basePrice.toLocaleString('es-CL')} ${service.currency}.`,
       benefitLine,
-      `Precio final promocional: $${finalPrice.toLocaleString('es-CL')} ${service.currency}.`,
-      'El abono para reservar se mantiene igual que siempre y el descuento se aplica al saldo final en el spa.'
+      `Precio final con beneficio: $${finalPrice.toLocaleString('es-CL')} ${service.currency}.`,
+      'El abono para reservar se mantiene igual que siempre. El beneficio se descuenta del saldo final el dia de la cita.'
     ].join('\n'),
     collectedData
   });
@@ -1331,9 +1331,9 @@ function buildCampaignBookingIntroReply({ client, offer, service, collectedData,
     `Beneficio: ${benefitLine}`,
     '',
     'Como funciona:',
-    `- Para reservar pagas el abono habitual de ${depositAmount} CLP (igual que siempre).`,
-    '- La promocion se aplica sobre el saldo total el dia de tu cita, al momento de pagar en el spa.',
-    '- No hay ningun descuento sobre el abono de reserva.',
+    `- Para reservar se paga el abono habitual de ${depositAmount} CLP.`,
+    '- La promocion se aplica sobre el saldo final el dia de la cita.',
+    '- El abono de reserva no tiene descuento.',
     '',
     'Quieres continuar con la reserva?'
   ];
@@ -1760,7 +1760,7 @@ function buildHoldPaymentDetailsReply(holdBooking, collectedData, bookingId) {
   return buildReply({
     intent: 'booking',
     step: holdBooking.paymentStatus === 'EXPIRED' ? 'hold_expired' : 'awaiting_payment_proof',
-    text: `💰 El abono requerido para confirmar esta reserva es de ${remainingAmount} ${currency}.${partialLine}\n\nCuando realice la transferencia, envie aqui la foto o captura del comprobante para validarlo.`,
+    text: `El abono requerido para confirmar esta reserva es de ${remainingAmount} ${currency}.${partialLine}\n\nCuando realice la transferencia, envie aqui la foto o captura del comprobante para validarlo.`,
     collectedData,
     lastBookingId: bookingId
   });
@@ -1771,7 +1771,7 @@ function buildHoldPaymentDestinationReply(holdBooking, collectedData, bookingId)
   return buildReply({
     intent: 'booking',
     step: holdBooking.paymentStatus === 'EXPIRED' ? 'hold_expired' : 'awaiting_payment_proof',
-    text: `🏦 Estos son los datos para realizar el abono:\n\n${details}\n\nSi lo desea, tambien puedo indicarle el monto exacto a pagar.`,
+    text: `Estos son los datos para realizar el abono:\n\n${details}\n\nSi lo desea, tambien puedo indicarle el monto exacto a pagar.`,
     collectedData,
     lastBookingId: bookingId
   });
@@ -1784,7 +1784,7 @@ function buildHoldPaymentInfoReply(holdBooking, minutesLeft, collectedData, book
   return buildReply({
     intent: 'booking',
     step: holdBooking.paymentStatus === 'EXPIRED' ? 'hold_expired' : 'awaiting_payment_proof',
-    text: `💬 El abono es de ${totalRequired} ${currency}.\n\nPuede transferirlo a la cuenta informada y enviar aqui el comprobante.${timeText}`,
+    text: `El abono es de ${totalRequired} ${currency}.\n\nPuede transferirlo a la cuenta informada y enviar aqui el comprobante.${timeText}`,
     collectedData,
     lastBookingId: bookingId
   });
@@ -1806,12 +1806,12 @@ function buildHoldCompositeReply(holdBooking, minutesLeft, collectedData, bookin
     const partialLine = partialAmountPaid > 0
       ? ` Ya registra ${partialAmountPaid} ${currency} abonados, por lo que le faltan ${remainingAmount} ${currency}.`
       : '';
-    parts.push(`💰 El abono requerido para confirmar esta reserva es de ${remainingAmount} ${currency}.${partialLine}`);
+    parts.push(`El abono requerido para confirmar esta reserva es de ${remainingAmount} ${currency}.${partialLine}`);
   }
 
   if (requests.wantsPaymentDestination) {
     const details = String(env.spaTransferDetails || '').trim() || 'No tengo cargados los datos bancarios en este momento.';
-    parts.push(`🏦 Estos son los datos para realizar el abono:\n\n${details}`);
+    parts.push(`Estos son los datos para realizar el abono:\n\n${details}`);
   }
 
   parts.push('Cuando realice la transferencia, envie aqui la foto o captura del comprobante para validarlo.');

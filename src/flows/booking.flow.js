@@ -41,7 +41,7 @@ function buildDateListOutbound(bodyText = 'Elija el dia que prefiera para su cit
 function buildUnavailableServiceOutbound(serviceName) {
   return {
     kind: 'buttons',
-    bodyText: `Por el momento ${serviceName} no tiene un especialista asignado, por lo tanto no se encuentra disponible.\n\nPor favor elija otro servicio para continuar.`,
+    bodyText: `Por ahora ${serviceName} no tiene un especialista asignado, por lo que no se encuentra disponible para reservar.\n\nPuede elegir otro servicio y continuamos de inmediato.`,
     buttons: [
       { id: 'menu:book', title: 'Otro servicio' },
       { id: 'menu:main', title: 'Volver' }
@@ -77,7 +77,7 @@ function createBookingFlow({
     return buildReply({
       intent: 'booking',
       step: 'awaiting_service',
-      text: 'Perfecto, vamos a agendar su cita.\n\nSeleccione el servicio que desea reservar.',
+      text: 'Perfecto, vamos a agendar su cita.\n\nPrimero seleccione el servicio que desea reservar.',
       collectedData,
       outbound: await servicesFlow.createServiceListOutbound()
     });
@@ -102,7 +102,7 @@ function createBookingFlow({
       return buildReply({
         intent: 'booking',
         step: 'awaiting_formal_id',
-        text: 'Excelente.\n\nAhora necesito su RUT o identificador para completar su perfil y mostrarle horarios disponibles.',
+        text: 'Gracias.\n\nAhora necesito su RUT o identificador para completar el registro y mostrarle horarios disponibles.',
         collectedData: nextCollectedData
       });
     }
@@ -144,7 +144,7 @@ function createBookingFlow({
     });
 
     if (quote.unavailableReason === 'NO_SPECIALISTS') {
-      const unavailableText = `Por el momento ${quote.service.name} no tiene un especialista asignado, por lo tanto no se encuentra disponible.\n\nPor favor elija otro servicio para continuar.`;
+      const unavailableText = `Por ahora ${quote.service.name} no tiene un especialista asignado, por lo que no se encuentra disponible para reservar.\n\nPuede elegir otro servicio y continuamos de inmediato.`;
       return buildReply({
         intent: 'booking',
         step: 'awaiting_service',
@@ -163,8 +163,8 @@ function createBookingFlow({
     if (!slotRows.length) {
       const isToday = normalizedDate === dayjs().format('YYYY-MM-DD');
       const noSlotsText = isToday
-        ? `Hoy ya no quedan horarios disponibles para ${quote.service.name}.\n\nPor favor seleccione otra fecha.`
-        : `No hay horarios disponibles para ${quote.service.name} en esa fecha.\n\nElija otro dia y buscamos uno que le acomode.`;
+        ? `Hoy ya no quedan horarios disponibles para ${quote.service.name}.\n\nPuede revisar otra fecha o elegir otro servicio.`
+        : `No hay horarios disponibles para ${quote.service.name} en esa fecha.\n\nElija otro dia y buscamos una alternativa que le acomode.`;
 
       return buildReply({
         intent: 'booking',
@@ -270,7 +270,7 @@ function createBookingFlow({
     return buildReply({
       intent: 'booking',
       step: 'awaiting_payer_role',
-      text: `Ya casi terminamos.\n\nPara bloquear su horario necesitamos un abono previo de ${env.bookingDepositAmount} CLP.\n\nQuien realizara el pago del abono?`,
+      text: `Ya casi terminamos.\n\nPara reservar el horario se solicita un abono de ${env.bookingDepositAmount} CLP.\n\nQuien realizara el pago?`,
       collectedData: {
         ...collectedData,
         payerName: collectedData.payerName || client.name || null,
@@ -292,7 +292,7 @@ function createBookingFlow({
 
   function buildPayerSummaryReply(client, collectedData) {
     const payerFullName = [client.name, client.lastName].filter(Boolean).join(' ').trim();
-    const summaryText = `Tengo estos datos guardados sobre usted:\n\nNombre: ${payerFullName}\nRUT: ${client.formalId}\n\nConfirma que estos son los datos de quien realizara el abono?`;
+    const summaryText = `Tengo estos datos guardados sobre usted:\n\nNombre: ${payerFullName}\nRUT: ${client.formalId}\n\nConfirma que corresponden a la persona que realizara el abono?`;
 
     return buildReply({
       intent: 'booking',
@@ -321,11 +321,11 @@ function createBookingFlow({
     return buildReply({
       intent: 'booking',
       step: 'awaiting_payment_method',
-      text: `Para bloquear su horario necesitamos un abono de ${env.bookingDepositAmount} CLP.\n\nComo prefiere realizarlo?`,
+      text: `Para reservar el horario necesitamos un abono de ${env.bookingDepositAmount} CLP.\n\nComo prefiere realizarlo?`,
       collectedData,
       outbound: {
         kind: 'list',
-        bodyText: `Abono requerido: ${env.bookingDepositAmount} CLP.\nLuego del pago, tendra ${env.bookingHoldMinutes} minutos para enviar su comprobante.`,
+        bodyText: `Abono requerido: ${env.bookingDepositAmount} CLP.\nLuego del pago, tendra ${env.bookingHoldMinutes} minutos para enviar el comprobante y confirmar la cita.`,
         buttonText: 'Medio de pago',
         sections: [
           {

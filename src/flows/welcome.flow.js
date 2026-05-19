@@ -1,24 +1,27 @@
+const { env } = require('../config/env');
 const { buildReply } = require('./helpers');
 
 function createWelcomeFlow() {
   function buildMainMenuReply() {
+    const businessName = env.spaName || 'Spa La Roca';
+
     return buildReply({
       intent: 'menu',
       step: 'main_menu',
-      text: '🌿 Spa Ikigai Ovalle\n\nEstoy aqui para ayudarle con su reserva, servicios y consultas.',
+      text: `${businessName}\n\nHola, soy el asistente virtual. Puedo ayudarle a ver servicios, reservar una cita o resolver sus dudas.`,
       collectedData: { campaignContext: null },
       outbound: {
         kind: 'list',
-        bodyText: '🌿 *Spa Ikigai Ovalle*\n\nBienvenido/a.\nSeleccione una opcion para continuar.\n\nSi desea volver aqui en cualquier momento, escriba "volver".',
+        bodyText: `*${businessName}*\n\nBienvenido/a. Elija una opcion para continuar.\n\nPuede escribir "volver" en cualquier momento para regresar a este menu.`,
         buttonText: 'Ver menu',
         sections: [
           {
             title: 'Opciones principales',
             rows: [
-              { id: 'menu:services', title: 'Ver servicios', description: 'Tratamientos, duracion y valores' },
-              { id: 'menu:book', title: 'Reservar cita', description: 'Agende su momento de bienestar' },
+              { id: 'menu:services', title: 'Ver servicios', description: 'Duracion, detalle y valores' },
+              { id: 'menu:book', title: 'Reservar cita', description: 'Buscar fecha y horario disponible' },
               { id: 'menu:consult', title: 'Consultas', description: 'Horarios, pagos, ubicacion y mas' },
-              { id: 'menu:manage', title: 'Mis reservas', description: 'Revise o cancele sus citas' },
+              { id: 'menu:manage', title: 'Mis reservas', description: 'Revisar o cancelar citas activas' },
               { id: 'menu:exit', title: 'Salir', description: 'Cerrar la conversacion por ahora' }
             ]
           }
