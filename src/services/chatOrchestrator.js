@@ -216,12 +216,15 @@ function createChatOrchestrator({
     const campaignOffer = campaignContext?.offerId
       ? await campaignService.getOfferById(campaignContext.offerId).catch(() => null)
       : null;
-    const campaignServiceId = campaignContext?.serviceId || campaignOffer?.serviceId || null;
+    const campaignSelectedServiceId = conversation.currentStep === 'campaign_booking_intro'
+      ? collectedData.serviceId || null
+      : null;
+    const campaignServiceId = campaignContext?.serviceId || campaignOffer?.serviceId || campaignSelectedServiceId || null;
     const campaignServiceRecord = campaignServiceId
       ? await serviceCatalogService.getServiceById(campaignServiceId).catch(() => null)
       : null;
     const campaignCanIntroduce = campaignContext && canStartBookingFromContext(conversation.currentStep);
-    const campaignCanContinue = campaignContext && ['campaign_booking_intro', 'campaign_interest'].includes(conversation.currentStep);
+    const campaignCanContinue = campaignContext && ['campaign_booking_intro', 'campaign_interest', 'campaign_choose_service'].includes(conversation.currentStep);
     const campaignCanHandleText = campaignCanIntroduce || campaignCanContinue;
     const campaignEligibleStep = ![
       // Pasos de reserva en progreso – el intro de campaña no debe interrumpir
@@ -315,6 +318,19 @@ function createChatOrchestrator({
       }
       return bookingFlow.startBookingFlow(client, collectedData);
     }
+    if (campaignContext && !campaignServiceRecord && matchedService && ['campaign_choose_service', 'campaign_interest'].includes(conversation.currentStep)) {
+      return buildCampaignBookingIntroReply({
+        client,
+        offer: campaignOffer,
+        service: matchedService,
+        collectedData: {
+          ...collectedData,
+          serviceId: matchedService.id
+        },
+        depositAmount: env.bookingDepositAmount
+      });
+    }
+
     const isExplicitOtherService = matchedService && campaignServiceRecord && matchedService.id !== campaignServiceRecord.id;
 
     if (campaignCanHandleText && text && !isExplicitOtherService && (looksLikeCampaignInterest(lowerText) || resolvedIntent === 'booking' || (campaignCanContinue && looksLikeCampaignBookingConfirmation(lowerText)))) {
@@ -337,12 +353,12 @@ function createChatOrchestrator({
         });
       }
 
-      return buildReply({
-        intent: 'campaign',
-        step: 'campaign_interest',
-        text: 'Perfecto. Le ayudo a reservar la promocion.\n\nSeleccione el servicio que desea revisar.',
+      return buildCampaignGenericBookingIntroReply({
+        client,
+        offer: campaignOffer,
         collectedData,
-        outbound: await servicesFlow.createServiceListOutbound()
+        depositAmount: env.bookingDepositAmount,
+        serviceListOutbound: await servicesFlow.createServiceListOutbound()
       });
     }
 
@@ -1355,6 +1371,45 @@ function buildCampaignBookingIntroReply({ client, offer, service, collectedData,
         { id: 'campaignbook:confirm', title: 'Si, reservar ahora' },
         { id: 'menu:main', title: 'Volver al menu' }
       ]
+    }
+  });
+}
+
+function buildCampaignGenericBookingIntroReply({ client, offer, collectedData, depositAmount, serviceListOutbound }) {
+  const firstName = client.name ? client.name.split(' ')[0] : null;
+  const greeting = firstName ? `Hola ${firstName}, ` : '';
+
+  let benefitLine = 'una promocion especial en el servicio que elija.';
+  if (offer?.discountType === 'PERCENTAGE' && offer.discountValue) {
+    benefitLine = `${offer.discountValue}% de descuento en el servicio que elija.`;
+  } else if (offer?.discountType === 'FIXED_AMOUNT' && offer.discountValue) {
+    benefitLine = `$${Number(offer.discountValue).toLocaleString('es-CL')} CLP de descuento en el servicio que elija.`;
+  } else if (offer?.customText) {
+    benefitLine = offer.customText;
+  }
+
+  const bodyText = [
+    `${greeting}que bueno que quieres aprovechar la promo.`,
+    '',
+    `Beneficio: ${benefitLine}`,
+    '',
+    'Como funciona:',
+    `- Primero elige el servicio que desea reservar.`,
+    `- Para reservar se paga el abono habitual de ${depositAmount} CLP.`,
+    '- La promocion se aplica sobre el saldo final el dia de la cita.',
+    '- El abono de reserva no tiene descuento.',
+    '',
+    'Seleccione el servicio que desea reservar para continuar.'
+  ].join('\n');
+
+  return buildReply({
+    intent: 'campaign',
+    step: 'campaign_choose_service',
+    text: bodyText,
+    collectedData,
+    outbound: {
+      ...serviceListOutbound,
+      bodyText
     }
   });
 }
