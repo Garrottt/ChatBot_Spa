@@ -12,7 +12,7 @@ function createWelcomeFlow() {
       collectedData: { campaignContext: null },
       outbound: {
         kind: 'list',
-        bodyText: `*${businessName}*\n\nBienvenido/a. Elija una opcion para continuar.\n\nPuede escribir "volver" en cualquier momento para regresar a este menu.`,
+        bodyText: `Bienvenido/a.\n A*${businessName}* Elija una opcion para continuar.\n\nPuede escribir "volver" en cualquier momento para regresar a este menu.`,
         buttonText: 'Ver menu',
         sections: [
           {
