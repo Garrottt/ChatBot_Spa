@@ -3,7 +3,7 @@ const { buildReply } = require('./helpers');
 
 function createWelcomeFlow() {
   function buildMainMenuReply() {
-    const businessName = env.spaName || 'Spa La Roca';
+    const businessName = env.spaName || 'LipoExpress';
 
     return buildReply({
       intent: 'menu',
