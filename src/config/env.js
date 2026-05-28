@@ -43,7 +43,7 @@ const envSchema = z.object({
   CHATWOOT_INBOX_ID: z.string().default(''),
   CHATWOOT_API_ACCESS_TOKEN: z.string().default(''),
   CHATWOOT_WEBHOOK_SECRET: z.string().default(''),
-  SPA_NAME: z.string().default('Spa La Roca'),
+  SPA_NAME: z.string().default('LipoExpress'),
   SPA_BRAND_TONE: z.string().default('profesional, cercano y claro'),
   SPA_DESCRIPTION: z.string().default('Centro de estetica y bienestar enfocado en tratamientos personalizados, relajacion y cuidado integral.'),
   SPA_LOCATION: z.string().default('Pje. Cecilia Videla 755, 1840000 Ovalle, Coquimbo'),
