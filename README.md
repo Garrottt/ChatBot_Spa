@@ -30,9 +30,6 @@ Backend completo para automatizar la atención de clientes de spa vía WhatsApp.
 - 📣 Motor de campañas masivas con segmentación
 - 🔒 Máquina de estados para conversaciones con bot pausable
 
-## Variables de entorno
-
-Ver `.env.example` para configuración requerida.
 
 ## Repositorio relacionado
 
